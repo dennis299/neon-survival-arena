@@ -1,0 +1,83 @@
+import { ACHIEVEMENTS } from '../game/config'
+import type { RunStats } from '../game/types'
+import { formatTime } from './HUD'
+
+export default function GameOver({
+  stats,
+  newAchievements,
+  onRetry,
+  onMenu,
+}: {
+  stats: RunStats
+  newAchievements: string[]
+  onRetry: () => void
+  onMenu: () => void
+}) {
+  return (
+    <div className="overlay">
+      <h2 className="overlay-title glow-text danger-text">RUN OVER</h2>
+      {stats.newBest && <div className="new-best">★ NEW BEST TIME ★</div>}
+      <div className="recap-time">{formatTime(stats.time)}</div>
+      <div className="recap-grid">
+        <div className="recap-stat">
+          <span className="recap-num">{stats.level}</span>
+          <span>level</span>
+        </div>
+        <div className="recap-stat">
+          <span className="recap-num">{stats.kills}</span>
+          <span>kills</span>
+        </div>
+        <div className="recap-stat">
+          <span className="recap-num">{stats.bossesKilled}</span>
+          <span>bosses</span>
+        </div>
+        <div className="recap-stat">
+          <span className="recap-num">{stats.damageDealt.toLocaleString()}</span>
+          <span>damage</span>
+        </div>
+        <div className="recap-stat coin">
+          <span className="recap-num">+{stats.coins}</span>
+          <span>coins</span>
+        </div>
+      </div>
+
+      {stats.upgrades.length > 0 && (
+        <div className="recap-build">
+          {stats.upgrades.map((u) => (
+            <span
+              key={u.name}
+              className="build-chip"
+              style={{ ['--card-color' as string]: u.color }}
+              title={u.name}
+            >
+              {u.icon} {u.name} {u.level > 1 ? `×${u.level}` : ''}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {newAchievements.length > 0 && (
+        <div className="recap-achievements">
+          {newAchievements.map((id) => {
+            const a = ACHIEVEMENTS.find((x) => x.id === id)
+            if (!a) return null
+            return (
+              <div key={id} className="ach-toast">
+                {a.icon} <b>{a.name}</b> — {a.desc}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      <div className="overlay-btns">
+        <button className="btn primary" onClick={onRetry}>
+          ⟳ RUN IT BACK
+        </button>
+        <button className="btn" onClick={onMenu}>
+          MENU
+        </button>
+      </div>
+    </div>
+  )
+}

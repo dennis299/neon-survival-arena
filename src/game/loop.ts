@@ -1,0 +1,207 @@
+// The game loop. Owns the canvas, requestAnimationFrame, and the mutable
+// GameState. React talks to it only through the returned controls and the
+// GameCallbacks — no React state inside the hot path.
+
+import { CHARACTERS, UPGRADES, xpForLevel } from './config'
+import { createInput } from './input'
+import { createPlayer, updatePlayer } from './entities/player'
+import { firePlayerWeapon, updateBullets, updateDrones } from './entities/bullet'
+import { updateEnemies } from './entities/enemy'
+import { updateBoss } from './entities/boss'
+import { updateGems } from './entities/gem'
+import { resolveCollisions } from './systems/collision'
+import { rollChoices } from './systems/upgrade'
+import { applyUpgrade } from './systems/upgrade'
+import { updateSpawner } from './systems/spawn'
+import { updateParticles } from './systems/particles'
+import { render } from './render'
+import { sfx } from './audio'
+import type { GameCallbacks, GameState, RunStats, UpgradeDef } from './types'
+
+export interface GameOptions {
+  characterId: string
+  shakeScale: number
+  bestTime: number
+  callbacks: GameCallbacks
+}
+
+export interface GameControls {
+  pause: () => void
+  resume: () => void
+  isPaused: () => boolean
+  chooseUpgrade: (def: UpgradeDef) => void
+  destroy: () => void
+}
+
+const MAX_DT = 1 / 30
+const HUD_INTERVAL = 0.1
+
+export function createGame(canvas: HTMLCanvasElement, opts: GameOptions): GameControls {
+  const ctx = canvas.getContext('2d')!
+  const input = createInput(canvas)
+  const character = CHARACTERS.find((c) => c.id === opts.characterId) ?? CHARACTERS[0]
+
+  const state: GameState = {
+    time: 0,
+    kills: 0,
+    level: 1,
+    xp: 0,
+    xpNeeded: xpForLevel(2),
+    coins: 0,
+    damageDealt: 0,
+    bossesKilled: 0,
+    running: true,
+    paused: false,
+    over: false,
+    player: createPlayer(character),
+    enemies: [],
+    bullets: [],
+    enemyBullets: [],
+    gems: [],
+    particles: [],
+    texts: [],
+    droneUnits: [],
+    boss: null,
+    bossCycle: 0,
+    bossWarnT: 0,
+    spawnT: 0.5,
+    shake: 0,
+    nextId: 1,
+    upgradesTaken: {},
+  }
+
+  let viewW = 0
+  let viewH = 0
+  let raf = 0
+  let last = performance.now()
+  let hudT = 0
+  let fps = 60
+  let levelUpPending = false
+
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2)
+    viewW = canvas.clientWidth
+    viewH = canvas.clientHeight
+    canvas.width = Math.round(viewW * dpr)
+    canvas.height = Math.round(viewH * dpr)
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  }
+  resize()
+  window.addEventListener('resize', resize)
+
+  function pushHud() {
+    opts.callbacks.onHud({
+      hp: state.player.hp,
+      maxHp: state.player.maxHp,
+      xp: state.xp,
+      xpNeeded: state.xpNeeded,
+      level: state.level,
+      time: state.time,
+      kills: state.kills,
+      coins: state.coins,
+      bossHp: state.boss && !state.boss.dead ? state.boss.hp : 0,
+      bossMaxHp: state.boss ? state.boss.maxHp : 0,
+      bossName: state.boss ? state.boss.name : '',
+      fps,
+    })
+  }
+
+  function buildRunStats(): RunStats {
+    const upgrades = Object.entries(state.upgradesTaken).map(([id, level]) => {
+      const def = UPGRADES.find((u) => u.id === id)!
+      return { name: def.name, level, icon: def.icon, color: def.color }
+    })
+    return {
+      time: state.time,
+      kills: state.kills,
+      level: state.level,
+      coins: state.coins,
+      bossesKilled: state.bossesKilled,
+      damageDealt: Math.round(state.damageDealt),
+      upgrades,
+      newBest: state.time > opts.bestTime,
+    }
+  }
+
+  function update(dt: number) {
+    state.time += dt
+
+    const inp = input.poll(viewW / 2, viewH / 2)
+    updatePlayer(state, inp, dt)
+    firePlayerWeapon(state, dt)
+    updateDrones(state, dt)
+    updateBullets(state, dt)
+    updateEnemies(state, dt)
+    updateBoss(state, dt)
+    updateGems(state, dt)
+    updateSpawner(state, dt, viewW, viewH)
+    resolveCollisions(state)
+    updateParticles(state, dt)
+
+    // level-up: pause the sim and hand choices to React
+    if (state.xp >= state.xpNeeded && !levelUpPending) {
+      state.xp -= state.xpNeeded
+      state.level++
+      state.xpNeeded = xpForLevel(state.level + 1)
+      levelUpPending = true
+      state.paused = true
+      sfx.levelUp()
+      pushHud()
+      opts.callbacks.onLevelUp(rollChoices(state))
+    }
+
+    // death
+    if (state.player.hp <= 0 && !state.over) {
+      state.over = true
+      state.running = false
+      sfx.gameOver()
+      pushHud()
+      opts.callbacks.onGameOver(buildRunStats())
+    }
+  }
+
+  function frame(now: number) {
+    raf = requestAnimationFrame(frame)
+    const rawDt = (now - last) / 1000
+    last = now
+    if (rawDt > 0) fps = fps * 0.95 + (1 / rawDt) * 0.05
+
+    if (input.consumePause() && !levelUpPending && !state.over) {
+      state.paused = !state.paused
+    }
+
+    if (state.running && !state.paused) {
+      update(Math.min(rawDt, MAX_DT))
+      hudT -= rawDt
+      if (hudT <= 0) {
+        hudT = HUD_INTERVAL
+        pushHud()
+      }
+    }
+
+    render(ctx, state, input.state, viewW, viewH, opts.shakeScale)
+  }
+  raf = requestAnimationFrame(frame)
+
+  return {
+    pause: () => {
+      if (!state.over) state.paused = true
+    },
+    resume: () => {
+      if (!levelUpPending) state.paused = false
+    },
+    isPaused: () => state.paused,
+    chooseUpgrade: (def: UpgradeDef) => {
+      applyUpgrade(state, def)
+      sfx.pick()
+      levelUpPending = false
+      state.paused = false
+      pushHud()
+    },
+    destroy: () => {
+      cancelAnimationFrame(raf)
+      window.removeEventListener('resize', resize)
+      input.destroy()
+    },
+  }
+}
