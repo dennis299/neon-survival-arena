@@ -40,19 +40,30 @@ I can beat 20."*
   compositing, particle bursts, screen shake, floating damage numbers). Every
   sound *and* the music score are synthesized live with the Web Audio API —
   zero image/audio files anywhere in the game.
-- **A score that sings** — a 4-bar synthwave progression with pulsing sub bass,
-  a filtered arpeggio, four-on-the-floor drums, and a legato lead voice with
-  real portamento + vibrato carrying an actual melody. Intensity ramps with
-  survival time and kicks into a driving boss mode during boss fights.
-- **Desktop + mobile** — WASD + mouse on PC, dual virtual thumbsticks on phones,
-  auto-detected. Installable as a PWA ("Add to Home Screen").
+- **5 living environments, each with its own song** — every 60-120s the arena
+  transitions to a new biome (Cyber Outskirts → Toxic Wastes → Molten Core →
+  Frostbyte Zone → Deep Void → loops), each with its own palette, ambient
+  particles (spores, embers, snow, stars), *and* its own key/tempo/instrument
+  timbre in the music engine — the score crossfades to match. A banner
+  announces each transition.
+- **A score that sings** — a 4-bar synthwave progression per environment with
+  pulsing sub bass, a filtered arpeggio, four-on-the-floor drums, and a legato
+  lead voice with real portamento + vibrato carrying an actual melody.
+  Intensity ramps with survival time and kicks into a driving boss mode during
+  boss fights.
+- **Desktop + mobile, properly** — WASD + mouse on PC, dual virtual thumbsticks
+  on phones, auto-detected. A visible pause button (not just a keyboard
+  shortcut) so touch players can actually pause. Haptic feedback on
+  hits/level-ups/boss warnings, a screen wake lock so long runs don't dim the
+  phone, a rotate-your-device gate in portrait, larger touch targets, and a
+  "reduce effects" toggle for lower-end devices. Installable as a PWA.
 
 ## Controls
 
 | | Move | Aim | Fire | Pause |
 |---|---|---|---|---|
-| **Desktop** | WASD / arrows | mouse | automatic | P / Esc |
-| **Mobile** | left thumbstick | right thumbstick | automatic | — |
+| **Desktop** | WASD / arrows | mouse | automatic | P / Esc / pause button |
+| **Mobile** | left thumbstick | right thumbstick | automatic | pause button (top-right) |
 
 ## Tech stack
 
@@ -78,13 +89,20 @@ src/
     render.ts          — canvas renderer (cached glow sprites, additive pass)
     input.ts           — desktop + mobile input adapters
     audio.ts           — Web Audio SFX + the shared music gain bus
-    music.ts           — the procedural synthwave score (look-ahead scheduler)
+    music.ts           — the procedural score: 5 themes, look-ahead scheduler,
+                          crossfade transitions, a delay/echo send for Deep Void
+    environments.ts    — the 5 biome defs (palette, ambient particles, name)
+    haptics.ts         — Vibration API wrapper for hit/level-up/boss feedback
+    wakelock.ts        — screen wake lock so long runs don't dim the phone
     leaderboard.ts      — Supabase client: submit + fetch global scores
     storage.ts         — localStorage save/load
     config.ts          — ALL tuning: enemies, bosses, upgrades, difficulty curve
     entities/          — player, enemy AI, boss AI, bullets, gems
-    systems/           — spawn director, collision + damage, upgrades, particles
-  components/          — HUD, upgrade cards, menus, pause, game over (React)
+    systems/           — spawn director, collision + damage, upgrades,
+                          particles, ambient atmosphere
+  components/
+    OrientationGate.tsx — blocks play with a "rotate your device" prompt in portrait
+    HUD.tsx, ...       — HUD (incl. pause button), upgrade cards, menus, pause, game over
 public/                — PWA manifest + icons
 ```
 
@@ -106,6 +124,21 @@ Performance notes:
 Spawn interval eases from 1.1s → 0.16s over 13 minutes; enemy HP/speed scale on a
 gentle per-minute curve (not a spike); new enemy types unlock at time thresholds;
 bosses act as a periodic skill check with an HP multiplier per cycle.
+
+## The 5 environments
+
+| Biome | Mood | Ambient | Key / tempo |
+|---|---|---|---|
+| Cyber Outskirts | the default neon grid | — | C minor, 96 BPM |
+| Toxic Wastes | murky, grimy | drifting spores | A minor, 100 BPM, square-wave arp |
+| Molten Core | aggressive, fast | rising embers | F# minor, 128 BPM, all-sawtooth |
+| Frostbyte Zone | calm, ethereal | falling snow | B minor, 84 BPM, sine/triangle, sparse drums |
+| Deep Void | sparse, spacious | twinkling stars | D minor, 80 BPM, sparse drums + echo send |
+
+Every environment shares the same melodic contour (same scale-degree shape,
+transposed) so the themes feel like variations on one motif rather than five
+unrelated tracks — while still sounding distinct through key, tempo, and
+instrument timbre.
 
 ## Run it locally
 
@@ -139,6 +172,16 @@ local-only leaderboard automatically.
 - **RLS is the entire leaderboard backend.** Two Postgres policies (anon insert,
   anon select) on one table replace what would otherwise be an API route + auth
   layer. The client never needs a service key.
+- **Environment transitions need a duck, not a hard cut.** Swapping chords/tempo/
+  instrument waveforms mid-track instantly is jarring; briefly ducking a
+  dedicated gain node, swapping the theme at the quiet point, then fading back
+  reads as an intentional musical transition instead of a glitch.
+- **Mobile needs its own pause affordance.** The original build only bound
+  pause to a keyboard key — meaning touch players had *no way to pause at
+  all*. A visible on-screen button is not optional polish on a touch device.
+- **`OscillatorNode.type` can change on a running, already-started oscillator**
+  without recreating the node — which is what lets the persistent lead voice
+  keep its legato glide across an environment change instead of restarting.
 
 ## More screenshots
 
@@ -153,7 +196,7 @@ local-only leaderboard automatically.
 - Kill-streak multiplier + screen-clear "nova" panic button
 - Colorblind-safe palette option
 - Gamepad support
-- A second music theme for the menu screen
+- A music theme for the menu screen (currently silent until you hit Play)
 - Country/region flags on the global leaderboard
 
 ## License

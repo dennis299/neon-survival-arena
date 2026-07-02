@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react'
 import { ACHIEVEMENTS, CHARACTERS } from '../game/config'
+import { unlockAudio } from '../game/audio'
 import { fetchTopScores, isGlobalLeaderboardEnabled, type GlobalScore } from '../game/leaderboard'
 import type { SaveData } from '../game/storage'
 import { formatTime } from './HUD'
 
 type Tab = 'play' | 'ranks' | 'trophies'
 type Board = 'local' | 'global'
+
+const HAS_VIBRATE = typeof navigator !== 'undefined' && 'vibrate' in navigator
 
 export default function MainMenu({
   save,
@@ -15,6 +18,8 @@ export default function MainMenu({
   onToggleMute,
   onShake,
   onRename,
+  onToggleHaptics,
+  onToggleReduceEffects,
 }: {
   save: SaveData
   onPlay: () => void
@@ -23,6 +28,8 @@ export default function MainMenu({
   onToggleMute: () => void
   onShake: (v: number) => void
   onRename: (name: string) => void
+  onToggleHaptics: () => void
+  onToggleReduceEffects: () => void
 }) {
   const [tab, setTab] = useState<Tab>('play')
   const [board, setBoard] = useState<Board>(isGlobalLeaderboardEnabled() ? 'global' : 'local')
@@ -119,12 +126,29 @@ export default function MainMenu({
               )
             })}
           </div>
-          <button className="play-btn glow-text" onClick={onPlay}>
+          <button
+            className="play-btn glow-text"
+            onClick={() => {
+              // resume/create the AudioContext synchronously inside this click
+              // handler — iOS Safari only honors the unlock within the
+              // original user-gesture call stack, not after a React effect
+              unlockAudio()
+              onPlay()
+            }}
+          >
             ▶ PLAY
           </button>
           <div className="settings-row">
             <button className="mini-btn" onClick={onToggleMute}>
               {save.settings.muted ? '🔇 sound off' : '🔊 sound on'}
+            </button>
+            {HAS_VIBRATE && (
+              <button className="mini-btn" onClick={onToggleHaptics}>
+                {save.settings.haptics ? '📳 haptics on' : '📴 haptics off'}
+              </button>
+            )}
+            <button className="mini-btn" onClick={onToggleReduceEffects}>
+              {save.settings.reduceEffects ? '🌫️ effects: low' : '✨ effects: full'}
             </button>
             <label className="shake-label">
               shake

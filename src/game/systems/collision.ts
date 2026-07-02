@@ -5,6 +5,7 @@
 
 import { ENEMY_COLORS, PALETTE } from '../config'
 import { sfx } from '../audio'
+import { haptics } from '../haptics'
 import { dropCoin, dropGem } from '../entities/gem'
 import { addText, spawnBurst, spawnExplosionFx } from './particles'
 import type { Boss, Bullet, Enemy, GameState } from '../types'
@@ -258,6 +259,7 @@ export function resolveCollisions(state: GameState) {
     state.bossesKilled++
     state.kills++
     sfx.bossDie()
+    haptics.bossDie()
     state.shake += 26
     spawnBurst(state, boss.x, boss.y, '#ffd23e', 60, 340, 6, 1, true)
     spawnBurst(state, boss.x, boss.y, '#ff5db1', 40, 260, 5, 0.8, true)
@@ -324,6 +326,7 @@ function hurtPlayer(state: GameState, damage: number) {
   p.hurtFlash = 0.25
   state.shake += 8
   sfx.hurt()
+  haptics.hurt()
   addText(state, p.x, p.y - 20, `-${Math.round(damage)}`, PALETTE.hp, 15)
   spawnBurst(state, p.x, p.y, PALETTE.hp, 8, 140, 3, 0.4, true)
 }

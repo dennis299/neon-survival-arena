@@ -1,8 +1,10 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import MainMenu from './components/MainMenu'
+import OrientationGate from './components/OrientationGate'
 import GameScreen from './GameScreen'
 import { CHARACTERS } from './game/config'
-import { setMuted } from './game/audio'
+import { setMuted, unlockAudio } from './game/audio'
+import { setHapticsEnabled } from './game/haptics'
 import {
   addLeaderboardEntry,
   loadSave,
@@ -36,6 +38,19 @@ export default function App() {
   // keep the latest save reachable from game callbacks without re-mounting the game
   const saveRef = useRef(save)
   saveRef.current = save
+
+  // a first touch anywhere unlocks/resumes audio — a safety net alongside the
+  // explicit unlockAudio() call on the Play button, for browsers stricter
+  // about exactly which gesture counts
+  useEffect(() => {
+    const handler = () => unlockAudio()
+    document.addEventListener('pointerdown', handler, { once: true })
+    return () => document.removeEventListener('pointerdown', handler)
+  }, [])
+
+  useEffect(() => {
+    setHapticsEnabled(save.settings.haptics)
+  }, [save.settings.haptics])
 
   const updateSave = useCallback((next: SaveData) => {
     setSave(next)
@@ -83,41 +98,56 @@ export default function App() {
 
   if (screen === 'game') {
     return (
-      <GameScreen
-        save={save}
-        runKey={runKey}
-        onRunEnd={handleRunEnd}
-        onAbandon={handleAbandon}
-        onToggleMute={toggleMute}
-        onRetry={() => setRunKey((k) => k + 1)}
-        onMenu={() => setScreen('menu')}
-      />
+      <>
+        <OrientationGate />
+        <GameScreen
+          save={save}
+          runKey={runKey}
+          onRunEnd={handleRunEnd}
+          onAbandon={handleAbandon}
+          onToggleMute={toggleMute}
+          onRetry={() => setRunKey((k) => k + 1)}
+          onMenu={() => setScreen('menu')}
+        />
+      </>
     )
   }
 
   return (
-    <MainMenu
-      save={save}
-      onPlay={() => {
-        setRunKey((k) => k + 1)
-        setScreen('game')
-      }}
-      onSelectCharacter={(id) => updateSave({ ...save, selectedCharacter: id })}
-      onBuyCharacter={(id) => {
-        const def = CHARACTERS.find((c) => c.id === id)
-        if (!def || save.coins < def.cost) return
-        updateSave({
-          ...save,
-          coins: save.coins - def.cost,
-          unlockedCharacters: [...save.unlockedCharacters, id],
-          selectedCharacter: id,
-        })
-      }}
-      onToggleMute={toggleMute}
-      onShake={(v) =>
-        updateSave({ ...save, settings: { ...save.settings, screenShake: v } })
-      }
-      onRename={(name) => updateSave({ ...save, playerName: name })}
-    />
+    <>
+      <OrientationGate />
+      <MainMenu
+        save={save}
+        onPlay={() => {
+          setRunKey((k) => k + 1)
+          setScreen('game')
+        }}
+        onSelectCharacter={(id) => updateSave({ ...save, selectedCharacter: id })}
+        onBuyCharacter={(id) => {
+          const def = CHARACTERS.find((c) => c.id === id)
+          if (!def || save.coins < def.cost) return
+          updateSave({
+            ...save,
+            coins: save.coins - def.cost,
+            unlockedCharacters: [...save.unlockedCharacters, id],
+            selectedCharacter: id,
+          })
+        }}
+        onToggleMute={toggleMute}
+        onShake={(v) =>
+          updateSave({ ...save, settings: { ...save.settings, screenShake: v } })
+        }
+        onRename={(name) => updateSave({ ...save, playerName: name })}
+        onToggleHaptics={() =>
+          updateSave({ ...save, settings: { ...save.settings, haptics: !save.settings.haptics } })
+        }
+        onToggleReduceEffects={() =>
+          updateSave({
+            ...save,
+            settings: { ...save.settings, reduceEffects: !save.settings.reduceEffects },
+          })
+        }
+      />
+    </>
   )
 }

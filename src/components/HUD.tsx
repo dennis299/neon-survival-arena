@@ -6,7 +6,7 @@ export function formatTime(t: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-export default function HUD({ hud }: { hud: HudSnapshot }) {
+export default function HUD({ hud, onPause }: { hud: HudSnapshot; onPause: () => void }) {
   const hpPct = Math.max(0, (hud.hp / hud.maxHp) * 100)
   const xpPct = Math.min(100, (hud.xp / hud.xpNeeded) * 100)
   return (
@@ -24,10 +24,18 @@ export default function HUD({ hud }: { hud: HudSnapshot }) {
             <span className="bar-label">LV {hud.level}</span>
           </div>
         </div>
-        <div className="hud-timer">{formatTime(hud.time)}</div>
-        <div className="hud-right">
-          <div className="hud-stat">💀 {hud.kills}</div>
-          <div className="hud-stat coin">🪙 {hud.coins}</div>
+        <div className="hud-center">
+          <div className="hud-timer">{formatTime(hud.time)}</div>
+          <div className="env-label">{hud.envName}</div>
+        </div>
+        <div className="hud-right-group">
+          <div className="hud-right">
+            <div className="hud-stat">💀 {hud.kills}</div>
+            <div className="hud-stat coin">🪙 {hud.coins}</div>
+          </div>
+          <button className="pause-btn" onClick={onPause} aria-label="Pause">
+            ⏸
+          </button>
         </div>
       </div>
       {hud.bossMaxHp > 0 && hud.bossHp > 0 && (

@@ -31,6 +31,17 @@ export function unlockAudio() {
   ensureCtx()
 }
 
+// Mobile browsers frequently suspend the AudioContext on backgrounding
+// (tab switch, phone lock, incoming call) and don't always resume it
+// automatically when the page becomes visible again — do it ourselves.
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && ctx?.state === 'suspended') {
+      void ctx.resume()
+    }
+  })
+}
+
 /** The shared context + buses, for the music engine. */
 export function getAudioEngine(): { ctx: AudioContext; music: GainNode } | null {
   const c = ensureCtx()

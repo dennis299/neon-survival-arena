@@ -4,6 +4,7 @@
 // with decaying screen shake.
 
 import { ENEMY_COLORS, PALETTE } from './config'
+import { ENVIRONMENTS } from './environments'
 import type { Boss, Enemy, GameState } from './types'
 import type { InputState } from './input'
 
@@ -62,7 +63,7 @@ function drawPoly(
   }
 }
 
-function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy) {
+function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, bgColor: string) {
   const color = ENEMY_COLORS[e.kind]
   const flash = e.hitFlash > 0
   const c = flash ? '#ffffff' : color
@@ -73,7 +74,7 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy) {
       break
     case 'tank':
       drawPoly(ctx, e.x, e.y, e.radius, 4, e.angle + Math.PI / 4, c, true)
-      drawPoly(ctx, e.x, e.y, e.radius * 0.55, 4, e.angle + Math.PI / 4, PALETTE.bg, true)
+      drawPoly(ctx, e.x, e.y, e.radius * 0.55, 4, e.angle + Math.PI / 4, bgColor, true)
       break
     case 'sniper':
       drawPoly(ctx, e.x, e.y, e.radius, 5, e.angle, c, false)
@@ -126,7 +127,7 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy) {
   }
 }
 
-function drawBoss(ctx: CanvasRenderingContext2D, b: Boss, time: number) {
+function drawBoss(ctx: CanvasRenderingContext2D, b: Boss, time: number, bgColor: string) {
   if (b.hidden) {
     // rumbling ground marker
     const pulse = 1 + Math.sin(time * 18) * 0.2
@@ -148,7 +149,7 @@ function drawBoss(ctx: CanvasRenderingContext2D, b: Boss, time: number) {
   switch (b.kind) {
     case 'robot':
       drawPoly(ctx, b.x, b.y, b.radius, 4, Math.PI / 4, c, true)
-      drawPoly(ctx, b.x, b.y, b.radius * 0.6, 4, Math.PI / 4, PALETTE.bg, true)
+      drawPoly(ctx, b.x, b.y, b.radius * 0.6, 4, Math.PI / 4, bgColor, true)
       drawPoly(ctx, b.x, b.y, b.radius * 0.3, 4, time * 2, c, true)
       break
     case 'worm':
@@ -164,7 +165,7 @@ function drawBoss(ctx: CanvasRenderingContext2D, b: Boss, time: number) {
       break
     case 'queen':
       drawPoly(ctx, b.x, b.y, b.radius, 6, time * 0.8, c, true)
-      drawPoly(ctx, b.x, b.y, b.radius * 0.55, 6, -time * 1.2, PALETTE.bg, true)
+      drawPoly(ctx, b.x, b.y, b.radius * 0.55, 6, -time * 1.2, bgColor, true)
       drawPoly(ctx, b.x, b.y, b.radius * 0.3, 3, time * 2, c, true)
       break
   }
@@ -180,8 +181,9 @@ export function render(
   shakeScale: number,
 ) {
   const p = state.player
+  const env = ENVIRONMENTS[state.envIndex]
 
-  ctx.fillStyle = PALETTE.bg
+  ctx.fillStyle = env.bg
   ctx.fillRect(0, 0, w, h)
 
   const shakeX = (Math.random() - 0.5) * state.shake * shakeScale
@@ -194,7 +196,7 @@ export function render(
 
   // grid
   const grid = 56
-  ctx.strokeStyle = PALETTE.grid
+  ctx.strokeStyle = env.grid
   ctx.lineWidth = 1
   ctx.beginPath()
   for (let x = Math.floor(camX / grid) * grid; x < camX + w + grid; x += grid) {
@@ -209,6 +211,14 @@ export function render(
 
   // additive pass for everything glowy
   ctx.globalCompositeOperation = 'lighter'
+
+  // ambient atmosphere — drifting embers/snow/spores/stars behind the action
+  if (env.ambient !== 'none') {
+    for (const a of state.ambientParticles) {
+      const twinkle = env.ambient === 'stars' ? 0.5 + 0.5 * Math.sin(a.twinklePhase * 2) : 1
+      drawGlow(ctx, a.x, a.y, a.size * (env.ambient === 'stars' ? 3 : 5), env.ambientColor, a.alpha * twinkle)
+    }
+  }
 
   // gems & coins
   for (const g of state.gems) {
@@ -238,10 +248,10 @@ export function render(
   }
 
   // enemies
-  for (const e of state.enemies) drawEnemy(ctx, e)
+  for (const e of state.enemies) drawEnemy(ctx, e, env.bg)
 
   // boss
-  if (state.boss) drawBoss(ctx, state.boss, state.time)
+  if (state.boss) drawBoss(ctx, state.boss, state.time, env.bg)
 
   // drones
   for (const d of state.droneUnits) {
@@ -292,6 +302,18 @@ export function render(
   ctx.globalAlpha = 1
 
   ctx.restore()
+
+  // environment transition banner — fades in, holds, fades out
+  if (state.envBannerT > 0) {
+    const t = state.envBannerT
+    const alpha = t > 2.5 ? (3.2 - t) / 0.7 : Math.min(1, t / 0.7)
+    ctx.globalAlpha = Math.max(0, Math.min(1, alpha))
+    ctx.fillStyle = env.bannerColor
+    ctx.font = "bold 22px 'Courier New', monospace"
+    ctx.textAlign = 'center'
+    ctx.fillText(`⟡ ENTERING: ${env.name} ⟡`, w / 2, h * 0.14)
+    ctx.globalAlpha = 1
+  }
 
   // boss incoming warning — red pulse frame
   if (state.bossWarnT > 0) {

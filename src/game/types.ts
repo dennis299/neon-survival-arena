@@ -129,6 +129,19 @@ export interface FloatingText {
   size: number
 }
 
+/** A continuously-drifting background particle (embers/snow/spores/stars) that
+ * sells an environment's atmosphere. Never expires — it wraps around the
+ * player instead of fading, unlike combat Particles. */
+export interface AmbientParticle {
+  x: number
+  y: number
+  vx: number
+  vy: number
+  size: number
+  alpha: number
+  twinklePhase: number
+}
+
 export interface Drone {
   angle: number
   fireT: number
@@ -219,6 +232,8 @@ export interface HudSnapshot {
   bossMaxHp: number
   bossName: string
   fps: number
+  envId: string
+  envName: string
 }
 
 export interface GameCallbacks {
@@ -255,4 +270,13 @@ export interface GameState {
   shake: number
   nextId: number
   upgradesTaken: Record<string, number>
+  ambientParticles: AmbientParticle[]
+  /** index into ENVIRONMENTS */
+  envIndex: number
+  /** seconds remaining before the next environment switch */
+  envT: number
+  /** seconds remaining to show the "ENTERING <name>" banner */
+  envBannerT: number
+  /** caps particle/ambient counts for battery/perf on lower-end devices */
+  lowEffects: boolean
 }

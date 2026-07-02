@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from 'react'
 import { createGame, type GameControls } from './game/loop'
 import { setMuted, unlockAudio } from './game/audio'
 import { startMusic, type MusicHandle } from './game/music'
+import { setHapticsEnabled } from './game/haptics'
+import { acquireWakeLock, releaseWakeLock, watchWakeLockVisibility } from './game/wakelock'
 import { isGlobalLeaderboardEnabled, submitScore } from './game/leaderboard'
 import type { HudSnapshot, RunStats, UpgradeChoice } from './game/types'
 import type { SaveData } from './game/storage'
@@ -26,6 +28,8 @@ const EMPTY_HUD: HudSnapshot = {
   bossMaxHp: 0,
   bossName: '',
   fps: 60,
+  envId: 'outskirts',
+  envName: 'CYBER OUTSKIRTS',
 }
 
 /** seconds of run time before the score reaches full musical intensity */
@@ -52,6 +56,7 @@ export default function GameScreen({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const controlsRef = useRef<GameControls | null>(null)
   const musicRef = useRef<MusicHandle | null>(null)
+  const lastEnvIdRef = useRef('outskirts')
   const [hud, setHud] = useState<HudSnapshot>(EMPTY_HUD)
   const [choices, setChoices] = useState<UpgradeChoice[] | null>(null)
   const [paused, setPaused] = useState(false)
@@ -65,7 +70,11 @@ export default function GameScreen({
     if (!canvas) return
     unlockAudio()
     setMuted(save.settings.muted)
+    setHapticsEnabled(save.settings.haptics)
     musicRef.current = startMusic()
+    lastEnvIdRef.current = 'outskirts'
+    void acquireWakeLock()
+    const stopWatchingVisibility = watchWakeLockVisibility()
     bankedRef.current = false
     setHud(EMPTY_HUD)
     setChoices(null)
@@ -77,11 +86,16 @@ export default function GameScreen({
       characterId: save.selectedCharacter,
       shakeScale: save.settings.screenShake,
       bestTime: save.bestTime,
+      lowEffects: save.settings.reduceEffects,
       callbacks: {
         onHud: (h) => {
           setHud(h)
           musicRef.current?.setIntensity(h.time / INTENSITY_RAMP)
           musicRef.current?.setBoss(h.bossMaxHp > 0)
+          if (h.envId !== lastEnvIdRef.current) {
+            lastEnvIdRef.current = h.envId
+            musicRef.current?.setTheme(h.envId)
+          }
         },
         onLevelUp: setChoices,
         onGameOver: (stats) => {
@@ -108,6 +122,8 @@ export default function GameScreen({
       controlsRef.current = null
       musicRef.current?.stop()
       musicRef.current = null
+      stopWatchingVisibility()
+      releaseWakeLock()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runKey])
@@ -124,7 +140,13 @@ export default function GameScreen({
   return (
     <div className="game-screen">
       <canvas ref={canvasRef} className="game-canvas" />
-      <HUD hud={hud} />
+      <HUD
+        hud={hud}
+        onPause={() => {
+          controlsRef.current?.pause()
+          setPaused(true)
+        }}
+      />
       {choices && !gameOver && (
         <UpgradeCards
           choices={choices}

@@ -3,6 +3,7 @@
 import type { FloatingText, GameState } from '../types'
 
 const PARTICLE_CAP = 900
+const PARTICLE_CAP_LOW = 320
 
 export function spawnBurst(
   state: GameState,
@@ -15,7 +16,8 @@ export function spawnBurst(
   life: number,
   glow: boolean,
 ) {
-  const room = PARTICLE_CAP - state.particles.length
+  const cap = state.lowEffects ? PARTICLE_CAP_LOW : PARTICLE_CAP
+  const room = cap - state.particles.length
   const n = Math.min(count, Math.max(0, room))
   for (let i = 0; i < n; i++) {
     const a = Math.random() * Math.PI * 2

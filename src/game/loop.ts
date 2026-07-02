@@ -3,6 +3,7 @@
 // GameCallbacks — no React state inside the hot path.
 
 import { CHARACTERS, UPGRADES, xpForLevel } from './config'
+import { ENVIRONMENTS, nextEnvIndex, randomEnvDuration } from './environments'
 import { createInput } from './input'
 import { createPlayer, updatePlayer } from './entities/player'
 import { firePlayerWeapon, updateBullets, updateDrones } from './entities/bullet'
@@ -14,14 +15,17 @@ import { rollChoices } from './systems/upgrade'
 import { applyUpgrade } from './systems/upgrade'
 import { updateSpawner } from './systems/spawn'
 import { updateParticles } from './systems/particles'
+import { resetAmbient, updateAmbient } from './systems/ambient'
 import { render } from './render'
 import { sfx } from './audio'
+import { haptics } from './haptics'
 import type { GameCallbacks, GameState, RunStats, UpgradeDef } from './types'
 
 export interface GameOptions {
   characterId: string
   shakeScale: number
   bestTime: number
+  lowEffects: boolean
   callbacks: GameCallbacks
 }
 
@@ -68,7 +72,13 @@ export function createGame(canvas: HTMLCanvasElement, opts: GameOptions): GameCo
     shake: 0,
     nextId: 1,
     upgradesTaken: {},
+    ambientParticles: [],
+    envIndex: 0,
+    envT: randomEnvDuration(),
+    envBannerT: 2.6,
+    lowEffects: opts.lowEffects,
   }
+  resetAmbient(state, ENVIRONMENTS[state.envIndex].ambient, state.lowEffects)
 
   let viewW = 0
   let viewH = 0
@@ -103,6 +113,8 @@ export function createGame(canvas: HTMLCanvasElement, opts: GameOptions): GameCo
       bossMaxHp: state.boss ? state.boss.maxHp : 0,
       bossName: state.boss ? state.boss.name : '',
       fps,
+      envId: ENVIRONMENTS[state.envIndex].id,
+      envName: ENVIRONMENTS[state.envIndex].name,
     })
   }
 
@@ -138,6 +150,17 @@ export function createGame(canvas: HTMLCanvasElement, opts: GameOptions): GameCo
     resolveCollisions(state)
     updateParticles(state, dt)
 
+    // environment cycling: every 60-120s the arena (and its music theme) changes
+    state.envT -= dt
+    if (state.envT <= 0) {
+      state.envIndex = nextEnvIndex(state.envIndex)
+      state.envT = randomEnvDuration()
+      state.envBannerT = 3.2
+      resetAmbient(state, ENVIRONMENTS[state.envIndex].ambient, state.lowEffects)
+    }
+    state.envBannerT = Math.max(0, state.envBannerT - dt)
+    updateAmbient(state, dt, ENVIRONMENTS[state.envIndex].ambient)
+
     // level-up: pause the sim and hand choices to React
     if (state.xp >= state.xpNeeded && !levelUpPending) {
       state.xp -= state.xpNeeded
@@ -146,6 +169,7 @@ export function createGame(canvas: HTMLCanvasElement, opts: GameOptions): GameCo
       levelUpPending = true
       state.paused = true
       sfx.levelUp()
+      haptics.levelUp()
       pushHud()
       opts.callbacks.onLevelUp(rollChoices(state))
     }

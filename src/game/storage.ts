@@ -21,6 +21,8 @@ export interface SaveData {
   settings: {
     muted: boolean
     screenShake: number
+    haptics: boolean
+    reduceEffects: boolean
   }
 }
 
@@ -40,7 +42,7 @@ function defaults(): SaveData {
     leaderboard: [],
     achievements: [],
     playerName: randomName(),
-    settings: { muted: false, screenShake: 1 },
+    settings: { muted: false, screenShake: 1, haptics: true, reduceEffects: false },
   }
 }
 

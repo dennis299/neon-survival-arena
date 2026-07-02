@@ -3,6 +3,7 @@
 
 import { DIFFICULTY, ENEMY_DEFS } from '../config'
 import { sfx } from '../audio'
+import { haptics } from '../haptics'
 import { createBoss } from '../entities/boss'
 import { createEnemy } from '../entities/enemy'
 import type { EnemyKind, GameState } from '../types'
@@ -76,6 +77,7 @@ export function updateSpawner(state: GameState, dt: number, viewW: number, viewH
   if (!state.boss && state.bossWarnT <= 0 && state.time >= nextBossAt - 3) {
     state.bossWarnT = 3
     sfx.bossWarn()
+    haptics.bossWarn()
   }
   if (state.bossWarnT > 0) {
     state.bossWarnT -= dt
