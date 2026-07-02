@@ -1,5 +1,10 @@
 # ⚡ Neon Survival Arena
 
+[![Deployed on Vercel](https://img.shields.io/badge/deployed-vercel-000000?logo=vercel)](https://neon-survival-arena.vercel.app)
+[![MIT License](https://img.shields.io/badge/license-MIT-38ffb0)](LICENSE)
+[![React](https://img.shields.io/badge/react-19-4dd8ff?logo=react)](https://react.dev)
+[![TypeScript](https://img.shields.io/badge/typescript-strict-3178c6?logo=typescript&logoColor=white)](tsconfig.json)
+
 > A top-down neon survival shooter for desktop **and** mobile web. Move, auto-fire,
 > collect XP, level up, pick upgrades, survive the swarm. There is no ending —
 > **the clock is the score.**
@@ -18,8 +23,6 @@ enemies scale up → boss every 3 minutes → repeat, harder each cycle.**
 
 Random upgrade choices mean no two runs play the same. *"I survived 18 minutes...
 I can beat 20."*
-
-![Level up](docs/screenshots/levelup.png)
 
 ## Features
 
@@ -127,6 +130,10 @@ bosses act as a periodic skill check with an HP multiplier per cycle.
 
 ## The 5 environments
 
+Every 60-120 seconds the arena transitions to a new biome — new palette, new
+ambient particles, new song. A fade banner announces the change and the music
+ducks/swaps/fades back in instead of cutting hard.
+
 | Biome | Mood | Ambient | Key / tempo |
 |---|---|---|---|
 | Cyber Outskirts | the default neon grid | — | C minor, 96 BPM |
@@ -139,6 +146,14 @@ Every environment shares the same melodic contour (same scale-degree shape,
 transposed) so the themes feel like variations on one motif rather than five
 unrelated tracks — while still sounding distinct through key, tempo, and
 instrument timbre.
+
+| Toxic Wastes | Molten Core |
+|---|---|
+| ![Toxic Wastes](docs/screenshots/env_wastes.png) | ![Molten Core](docs/screenshots/env_core.png) |
+
+| Frostbyte Zone | Deep Void |
+|---|---|
+| ![Frostbyte Zone](docs/screenshots/env_frostbyte.png) | ![Deep Void](docs/screenshots/env_void.png) |
 
 ## Run it locally
 
@@ -185,9 +200,19 @@ local-only leaderboard automatically.
 
 ## More screenshots
 
-| Main menu | Run recap |
+| Main menu | Global + local leaderboard |
 |---|---|
-| ![Menu](docs/screenshots/menu.png) | ![Recap](docs/screenshots/recap.png) |
+| ![Menu](docs/screenshots/menu.png) | ![Leaderboard](docs/screenshots/leaderboard.png) |
+
+| Level up | Run recap |
+|---|---|
+| ![Level up](docs/screenshots/levelup.png) | ![Recap](docs/screenshots/recap.png) |
+
+### Mobile
+
+| Landscape gameplay (pause button top-right) | Portrait rotate gate |
+|---|---|
+| ![Mobile gameplay](docs/screenshots/mobile_gameplay.png) | ![Rotate gate](docs/screenshots/orientation_gate.png) |
 
 ## Future improvements
 
