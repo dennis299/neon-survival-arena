@@ -17,6 +17,7 @@ export interface SaveData {
   selectedCharacter: string
   leaderboard: LeaderboardEntry[]
   achievements: string[]
+  playerName: string
   settings: {
     muted: boolean
     screenShake: number
@@ -24,6 +25,10 @@ export interface SaveData {
 }
 
 const KEY = 'neon-survival-arena-save-v1'
+
+function randomName(): string {
+  return `Neon${Math.floor(1000 + Math.random() * 9000)}`
+}
 
 function defaults(): SaveData {
   return {
@@ -34,6 +39,7 @@ function defaults(): SaveData {
     selectedCharacter: 'vanguard',
     leaderboard: [],
     achievements: [],
+    playerName: randomName(),
     settings: { muted: false, screenShake: 1 },
   }
 }
@@ -41,9 +47,17 @@ function defaults(): SaveData {
 export function loadSave(): SaveData {
   try {
     const raw = localStorage.getItem(KEY)
-    if (!raw) return defaults()
+    if (!raw) {
+      const fresh = defaults()
+      writeSave(fresh)
+      return fresh
+    }
     const parsed = JSON.parse(raw) as Partial<SaveData>
-    return { ...defaults(), ...parsed, settings: { ...defaults().settings, ...parsed.settings } }
+    const merged = { ...defaults(), ...parsed, settings: { ...defaults().settings, ...parsed.settings } }
+    // first load after this feature shipped: persist the generated name so
+    // it doesn't re-randomize on every reload until the user changes it
+    if (!parsed.playerName) writeSave(merged)
+    return merged
   } catch {
     return defaults()
   }

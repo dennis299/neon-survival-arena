@@ -33,9 +33,17 @@ I can beat 20."*
   projectile bursts) — each cycle they return stronger
 - **Meta progression** — coins persist between runs to unlock 4 characters with
   different starting builds; local top-10 leaderboard; 9 achievements
+- **Global leaderboard** — every finished run is submitted to a public Supabase
+  table under your editable "callsign," visible to everyone who plays. No
+  accounts, no login — the menu's LEADERBOARD tab has a GLOBAL / THIS DEVICE toggle.
 - **All juice, no assets** — every visual is procedural canvas glow (additive
-  compositing, particle bursts, screen shake, floating damage numbers) and every
-  sound is synthesized live with the Web Audio API. Zero image/audio files.
+  compositing, particle bursts, screen shake, floating damage numbers). Every
+  sound *and* the music score are synthesized live with the Web Audio API —
+  zero image/audio files anywhere in the game.
+- **A score that sings** — a 4-bar synthwave progression with pulsing sub bass,
+  a filtered arpeggio, four-on-the-floor drums, and a legato lead voice with
+  real portamento + vibrato carrying an actual melody. Intensity ramps with
+  survival time and kicks into a driving boss mode during boss fights.
 - **Desktop + mobile** — WASD + mouse on PC, dual virtual thumbsticks on phones,
   auto-detected. Installable as a PWA ("Add to Home Screen").
 
@@ -52,8 +60,11 @@ I can beat 20."*
 - **HTML5 Canvas** — the actual game, driven by a raw `requestAnimationFrame`
   loop inside a React ref. Canvas owns the frame loop for performance; React owns
   everything around it and never touches the hot path.
-- **Web Audio API** — procedural synthesis for every sound effect
-- **localStorage** — coins, unlocks, leaderboard, achievements. No backend at all.
+- **Web Audio API** — procedural synthesis for every sound effect and the music score
+- **localStorage** — coins, unlocks, local leaderboard, achievements, callsign
+- **Supabase (Postgres)** — the *only* backend piece: one public `scores` table
+  behind Row Level Security (anonymous insert + read, nothing else) powers the
+  global leaderboard. Everything else in the game is 100% client-side.
 - **Vercel** — deploys as a static site, zero server config
 
 ## Architecture
@@ -66,7 +77,9 @@ src/
     loop.ts            — the game loop (rAF), owns the mutable GameState
     render.ts          — canvas renderer (cached glow sprites, additive pass)
     input.ts           — desktop + mobile input adapters
-    audio.ts           — Web Audio sound synthesis
+    audio.ts           — Web Audio SFX + the shared music gain bus
+    music.ts           — the procedural synthwave score (look-ahead scheduler)
+    leaderboard.ts      — Supabase client: submit + fetch global scores
     storage.ts         — localStorage save/load
     config.ts          — ALL tuning: enemies, bosses, upgrades, difficulty curve
     entities/          — player, enemy AI, boss AI, bullets, gems
@@ -102,7 +115,10 @@ npm run dev      # http://localhost:5173
 npm run build    # production build → dist/
 ```
 
-No env vars, no backend, no accounts. Clone and play.
+No accounts, and the game is fully playable with zero setup. The **global**
+leaderboard needs two env vars (copy `.env.example` → `.env.local` and fill in
+a Supabase project URL + anon key); without them the app falls back to the
+local-only leaderboard automatically.
 
 ## Lessons learned
 
@@ -115,6 +131,14 @@ No env vars, no backend, no accounts. Clone and play.
   just clipping — throttling identical SFX to one per ~60ms *sounds* better.
 - **Balance lives in one file on purpose** (`config.ts`) — every playtest tweak
   is a one-line diff.
+- **A "singing" synth lead is a persistent voice, not one-shot notes.** Creating
+  a fresh oscillator per note kills legato. Keeping one oscillator pair alive
+  for the whole run and *gliding* its frequency between notes (`setTargetAtTime`)
+  plus a low-depth vibrato LFO summed into the same `AudioParam` is what makes
+  it sound sung instead of plinked.
+- **RLS is the entire leaderboard backend.** Two Postgres policies (anon insert,
+  anon select) on one table replace what would otherwise be an API route + auth
+  layer. The client never needs a service key.
 
 ## More screenshots
 
@@ -129,6 +153,8 @@ No env vars, no backend, no accounts. Clone and play.
 - Kill-streak multiplier + screen-clear "nova" panic button
 - Colorblind-safe palette option
 - Gamepad support
+- A second music theme for the menu screen
+- Country/region flags on the global leaderboard
 
 ## License
 

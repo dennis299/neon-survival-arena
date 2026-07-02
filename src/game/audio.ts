@@ -3,8 +3,11 @@
 
 let ctx: AudioContext | null = null
 let master: GainNode | null = null
+let music: GainNode | null = null
 let muted = false
 let lastPlay: Record<string, number> = {}
+
+export const MUSIC_VOLUME = 0.3
 
 function ensureCtx(): AudioContext | null {
   if (typeof window === 'undefined') return null
@@ -15,6 +18,10 @@ function ensureCtx(): AudioContext | null {
     master = ctx.createGain()
     master.gain.value = 0.5
     master.connect(ctx.destination)
+    // separate bus for music so mute/toggles don't fight the SFX throttling
+    music = ctx.createGain()
+    music.gain.value = MUSIC_VOLUME
+    music.connect(master)
   }
   if (ctx.state === 'suspended') void ctx.resume()
   return ctx
@@ -24,8 +31,22 @@ export function unlockAudio() {
   ensureCtx()
 }
 
+/** The shared context + buses, for the music engine. */
+export function getAudioEngine(): { ctx: AudioContext; music: GainNode } | null {
+  const c = ensureCtx()
+  if (!c || !music) return null
+  return { ctx: c, music }
+}
+
 export function setMuted(m: boolean) {
   muted = m
+  if (ctx && music) {
+    music.gain.linearRampToValueAtTime(m ? 0 : MUSIC_VOLUME, ctx.currentTime + 0.15)
+  }
+}
+
+export function isSfxMuted() {
+  return muted
 }
 
 export function isMuted() {

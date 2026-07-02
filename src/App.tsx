@@ -117,6 +117,7 @@ export default function App() {
       onShake={(v) =>
         updateSave({ ...save, settings: { ...save.settings, screenShake: v } })
       }
+      onRename={(name) => updateSave({ ...save, playerName: name })}
     />
   )
 }

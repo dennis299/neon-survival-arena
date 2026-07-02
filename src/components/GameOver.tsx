@@ -2,14 +2,35 @@ import { ACHIEVEMENTS } from '../game/config'
 import type { RunStats } from '../game/types'
 import { formatTime } from './HUD'
 
+export type SubmitStatus = 'idle' | 'pending' | 'ok' | 'error' | 'disabled'
+
+function SubmitLine({ status, name }: { status: SubmitStatus; name: string }) {
+  if (status === 'idle' || status === 'disabled') return null
+  if (status === 'pending') {
+    return <div className="submit-line pending">🌐 syncing to global leaderboard…</div>
+  }
+  if (status === 'ok') {
+    return (
+      <div className="submit-line ok">
+        🌐 added to the global leaderboard as <b>{name}</b>
+      </div>
+    )
+  }
+  return <div className="submit-line error">🌐 offline — this run is saved locally only</div>
+}
+
 export default function GameOver({
   stats,
   newAchievements,
+  playerName,
+  submitStatus,
   onRetry,
   onMenu,
 }: {
   stats: RunStats
   newAchievements: string[]
+  playerName: string
+  submitStatus: SubmitStatus
   onRetry: () => void
   onMenu: () => void
 }) {
@@ -69,6 +90,8 @@ export default function GameOver({
           })}
         </div>
       )}
+
+      <SubmitLine status={submitStatus} name={playerName} />
 
       <div className="overlay-btns">
         <button className="btn primary" onClick={onRetry}>

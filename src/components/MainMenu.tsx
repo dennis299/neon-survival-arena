@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ACHIEVEMENTS, CHARACTERS } from '../game/config'
+import { fetchTopScores, isGlobalLeaderboardEnabled, type GlobalScore } from '../game/leaderboard'
 import type { SaveData } from '../game/storage'
 import { formatTime } from './HUD'
 
 type Tab = 'play' | 'ranks' | 'trophies'
+type Board = 'local' | 'global'
 
 export default function MainMenu({
   save,
@@ -12,6 +14,7 @@ export default function MainMenu({
   onBuyCharacter,
   onToggleMute,
   onShake,
+  onRename,
 }: {
   save: SaveData
   onPlay: () => void
@@ -19,8 +22,37 @@ export default function MainMenu({
   onBuyCharacter: (id: string) => void
   onToggleMute: () => void
   onShake: (v: number) => void
+  onRename: (name: string) => void
 }) {
   const [tab, setTab] = useState<Tab>('play')
+  const [board, setBoard] = useState<Board>(isGlobalLeaderboardEnabled() ? 'global' : 'local')
+  const [nameInput, setNameInput] = useState(save.playerName)
+  const [globalScores, setGlobalScores] = useState<GlobalScore[] | null>(null)
+  const [globalState, setGlobalState] = useState<'idle' | 'loading' | 'error'>('idle')
+
+  useEffect(() => setNameInput(save.playerName), [save.playerName])
+
+  function commitName() {
+    const trimmed = nameInput.trim().slice(0, 16)
+    if (trimmed && trimmed !== save.playerName) onRename(trimmed)
+    else setNameInput(save.playerName)
+  }
+
+  function loadGlobal() {
+    if (!isGlobalLeaderboardEnabled()) return
+    setGlobalState('loading')
+    fetchTopScores(10)
+      .then((scores) => {
+        setGlobalScores(scores)
+        setGlobalState('idle')
+      })
+      .catch(() => setGlobalState('error'))
+  }
+
+  useEffect(() => {
+    if (tab === 'ranks' && board === 'global' && globalScores === null) loadGlobal()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, board])
 
   return (
     <div className="menu">
@@ -34,6 +66,19 @@ export default function MainMenu({
         <span>⏱️ best {formatTime(save.bestTime)}</span>
         <span>💀 {save.totalKills.toLocaleString()} kills</span>
       </div>
+
+      <label className="name-field">
+        <span>callsign</span>
+        <input
+          value={nameInput}
+          maxLength={16}
+          onChange={(e) => setNameInput(e.target.value)}
+          onBlur={commitName}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+          }}
+        />
+      </label>
 
       <div className="tabs">
         <button className={tab === 'play' ? 'tab active' : 'tab'} onClick={() => setTab('play')}>
@@ -102,19 +147,72 @@ export default function MainMenu({
       )}
 
       {tab === 'ranks' && (
-        <div className="board">
-          {save.leaderboard.length === 0 && <p className="board-empty">no runs yet — go survive</p>}
-          {save.leaderboard.map((e, i) => (
-            <div key={i} className="board-row">
-              <span className="board-rank">#{i + 1}</span>
-              <span className="board-time">{formatTime(e.time)}</span>
-              <span>LV {e.level}</span>
-              <span>💀 {e.kills}</span>
-              <span className="board-char">{e.character}</span>
-              <span className="board-date">{e.date}</span>
+        <>
+          {isGlobalLeaderboardEnabled() && (
+            <div className="board-tabs">
+              <button
+                className={board === 'global' ? 'pill active' : 'pill'}
+                onClick={() => setBoard('global')}
+              >
+                🌐 GLOBAL
+              </button>
+              <button
+                className={board === 'local' ? 'pill active' : 'pill'}
+                onClick={() => setBoard('local')}
+              >
+                💾 THIS DEVICE
+              </button>
+              {board === 'global' && (
+                <button className="pill refresh" onClick={loadGlobal} title="refresh">
+                  ⟳
+                </button>
+              )}
             </div>
-          ))}
-        </div>
+          )}
+
+          {board === 'local' && (
+            <div className="board">
+              {save.leaderboard.length === 0 && (
+                <p className="board-empty">no runs yet — go survive</p>
+              )}
+              {save.leaderboard.map((e, i) => (
+                <div key={i} className="board-row">
+                  <span className="board-rank">#{i + 1}</span>
+                  <span className="board-time">{formatTime(e.time)}</span>
+                  <span>LV {e.level}</span>
+                  <span>💀 {e.kills}</span>
+                  <span className="board-char">{e.character}</span>
+                  <span className="board-date">{e.date}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {board === 'global' && (
+            <div className="board">
+              {globalState === 'loading' && <p className="board-empty">loading…</p>}
+              {globalState === 'error' && (
+                <p className="board-empty">couldn't reach the leaderboard — try again</p>
+              )}
+              {globalState === 'idle' && globalScores?.length === 0 && (
+                <p className="board-empty">no runs yet — be the first</p>
+              )}
+              {globalState === 'idle' &&
+                globalScores?.map((e, i) => (
+                  <div key={`${e.name}-${e.created_at}-${i}`} className="board-row">
+                    <span className="board-rank">#{i + 1}</span>
+                    <span className="board-time">{formatTime(e.time_seconds)}</span>
+                    <span>LV {e.level}</span>
+                    <span>💀 {e.kills}</span>
+                    <span className="board-char">{e.name}</span>
+                    <span className="board-date">
+                      {new Date(e.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          )}
+        </>
       )}
 
       {tab === 'trophies' && (

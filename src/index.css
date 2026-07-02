@@ -95,6 +95,35 @@ button {
   justify-content: center;
 }
 
+.name-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  color: var(--dim);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+}
+
+.name-field input {
+  font-family: var(--font);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--cyan);
+  padding: 6px 10px;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  width: 150px;
+  text-align: center;
+}
+
+.name-field input:focus {
+  outline: none;
+  border-color: var(--cyan);
+  box-shadow: 0 0 10px rgba(77, 216, 255, 0.25);
+}
+
 .tabs {
   display: flex;
   gap: 6px;
@@ -240,8 +269,36 @@ button {
 
 /* leaderboard */
 
-.board {
+.board-tabs {
+  display: flex;
+  gap: 8px;
   margin-top: 22px;
+  align-items: center;
+}
+
+.pill {
+  padding: 6px 16px;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  color: var(--dim);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  background: var(--panel);
+}
+
+.pill.active {
+  color: var(--cyan);
+  border-color: var(--cyan);
+  box-shadow: 0 0 10px rgba(77, 216, 255, 0.2);
+}
+
+.pill.refresh {
+  padding: 6px 11px;
+  margin-left: 4px;
+}
+
+.board {
+  margin-top: 14px;
   width: min(560px, 100%);
   display: flex;
   flex-direction: column;
@@ -692,4 +749,22 @@ button {
   padding: 8px 16px;
   font-size: 12px;
   animation: card-in 0.3s ease backwards;
+}
+
+.submit-line {
+  margin-top: 16px;
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+}
+
+.submit-line.pending {
+  color: var(--dim);
+}
+
+.submit-line.ok {
+  color: var(--green);
+}
+
+.submit-line.error {
+  color: var(--dim);
 }
