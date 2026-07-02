@@ -87,7 +87,7 @@ export function basePlayerStats(): PlayerStats {
     spreadDeg: 9,
     maxHp: 100,
     regen: 0,
-    speed: 175,
+    speed: 200,
     magnet: 70,
     pierce: 0,
     ricochet: 0,

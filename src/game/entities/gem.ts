@@ -1,5 +1,7 @@
-// XP gems and coins. Gems magnet toward the player inside the pickup radius;
-// leveling itself is resolved by the loop (it pauses the sim for the picker).
+// XP gems and coins. Gems magnet toward the player inside the pickup radius
+// (governed by the Gem Magnet upgrade); coins always home straight to the
+// player from the moment they drop — no manual collection needed. Leveling
+// itself is resolved by the loop (it pauses the sim for the picker).
 
 import { sfx } from '../audio'
 import { spawnBurst } from '../systems/particles'
@@ -9,6 +11,8 @@ import type { GameState } from '../types'
 const PICKUP_DIST = 18
 const MAGNET_ACCEL = 1400
 const GEM_CAP = 400
+const COIN_HOMING_ACCEL = 900
+const COIN_MIN_SPEED = 260
 
 export function dropGem(state: GameState, x: number, y: number, value: number) {
   // merge into fewer, bigger gems if the field is saturated (perf guard)
@@ -53,11 +57,22 @@ export function updateGems(state: GameState, dt: number) {
     const dx = p.x - g.x
     const dy = p.y - g.y
     const dist = Math.hypot(dx, dy) || 1
+    const nx = dx / dist
+    const ny = dy / dist
 
-    if (dist < p.magnet) {
+    if (g.isCoin) {
+      // coins always home to the player, regardless of range
+      g.vx += nx * COIN_HOMING_ACCEL * dt
+      g.vy += ny * COIN_HOMING_ACCEL * dt
+      const speed = Math.hypot(g.vx, g.vy)
+      if (speed < COIN_MIN_SPEED) {
+        g.vx = nx * COIN_MIN_SPEED
+        g.vy = ny * COIN_MIN_SPEED
+      }
+    } else if (dist < p.magnet) {
       const pull = MAGNET_ACCEL * (1 - dist / p.magnet) + 200
-      g.vx += (dx / dist) * pull * dt
-      g.vy += (dy / dist) * pull * dt
+      g.vx += nx * pull * dt
+      g.vy += ny * pull * dt
     } else {
       g.vx *= 1 - 3 * dt
       g.vy *= 1 - 3 * dt
