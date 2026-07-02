@@ -4,7 +4,7 @@
 > collect XP, level up, pick upgrades, survive the swarm. There is no ending —
 > **the clock is the score.**
 
-**🎮 Play it live:** _deploy link coming soon_
+**🎮 Play it live: [neon-survival-arena.vercel.app](https://neon-survival-arena.vercel.app)** — works on desktop and phones
 
 ![Gameplay](docs/screenshots/gameplay.png)
 
