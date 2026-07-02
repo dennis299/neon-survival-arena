@@ -1,6 +1,8 @@
-// XP gems and coins. Gems magnet toward the player inside the pickup radius
-// (governed by the Gem Magnet upgrade); coins always home straight to the
-// player from the moment they drop — no manual collection needed. Leveling
+// XP gems and coins both home straight to the player from the moment they
+// drop — no manual collection, just dodge enemies and let the rewards come
+// to you. Coins home at a fixed strength; gems scale with the player's
+// magnet stat, so the Gem Magnet upgrade still matters — it no longer just
+// extends pickup range, it makes gems fly in dramatically faster. Leveling
 // itself is resolved by the loop (it pauses the sim for the picker).
 
 import { sfx } from '../audio'
@@ -9,10 +11,12 @@ import { PALETTE } from '../config'
 import type { GameState } from '../types'
 
 const PICKUP_DIST = 18
-const MAGNET_ACCEL = 1400
 const GEM_CAP = 400
 const COIN_HOMING_ACCEL = 900
 const COIN_MIN_SPEED = 260
+// gem pull scales with the player's magnet stat (base 70 -> ~630 accel / ~180 min speed)
+const GEM_ACCEL_PER_MAGNET = 9
+const GEM_MIN_SPEED_PER_MAGNET = 2.6
 
 export function dropGem(state: GameState, x: number, y: number, value: number) {
   // merge into fewer, bigger gems if the field is saturated (perf guard)
@@ -60,22 +64,15 @@ export function updateGems(state: GameState, dt: number) {
     const nx = dx / dist
     const ny = dy / dist
 
-    if (g.isCoin) {
-      // coins always home to the player, regardless of range
-      g.vx += nx * COIN_HOMING_ACCEL * dt
-      g.vy += ny * COIN_HOMING_ACCEL * dt
-      const speed = Math.hypot(g.vx, g.vy)
-      if (speed < COIN_MIN_SPEED) {
-        g.vx = nx * COIN_MIN_SPEED
-        g.vy = ny * COIN_MIN_SPEED
-      }
-    } else if (dist < p.magnet) {
-      const pull = MAGNET_ACCEL * (1 - dist / p.magnet) + 200
-      g.vx += nx * pull * dt
-      g.vy += ny * pull * dt
-    } else {
-      g.vx *= 1 - 3 * dt
-      g.vy *= 1 - 3 * dt
+    // both gems and coins always home to the player, regardless of distance
+    const accel = g.isCoin ? COIN_HOMING_ACCEL : p.magnet * GEM_ACCEL_PER_MAGNET
+    const minSpeed = g.isCoin ? COIN_MIN_SPEED : p.magnet * GEM_MIN_SPEED_PER_MAGNET
+    g.vx += nx * accel * dt
+    g.vy += ny * accel * dt
+    const speed = Math.hypot(g.vx, g.vy)
+    if (speed < minSpeed) {
+      g.vx = nx * minSpeed
+      g.vy = ny * minSpeed
     }
     g.x += g.vx * dt
     g.y += g.vy * dt
