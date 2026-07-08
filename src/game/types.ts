@@ -167,6 +167,7 @@ export interface PlayerStats {
   fireLevel: number
   iceLevel: number
   drones: number
+  novaLevel: number
 }
 
 export interface Player extends PlayerStats {
@@ -179,6 +180,8 @@ export interface Player extends PlayerStats {
   hurtFlash: number
   /** invulnerability seconds after taking a hit */
   iframes: number
+  novaT: number
+  triggerNova: boolean
 }
 
 export interface UpgradeDef {
