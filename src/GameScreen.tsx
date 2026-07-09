@@ -7,7 +7,7 @@ import { setMuted, unlockAudio } from './game/audio'
 import { startMusic, type MusicHandle } from './game/music'
 import { setHapticsEnabled } from './game/haptics'
 import { acquireWakeLock, releaseWakeLock, watchWakeLockVisibility } from './game/wakelock'
-import { isGlobalLeaderboardEnabled, submitScore } from './game/leaderboard'
+import { fetchRankFor, isGlobalLeaderboardEnabled, submitScore } from './game/leaderboard'
 import type { HudSnapshot, RunStats, UpgradeChoice } from './game/types'
 import type { SaveData } from './game/storage'
 import HUD from './components/HUD'
@@ -30,6 +30,9 @@ const EMPTY_HUD: HudSnapshot = {
   fps: 60,
   envId: 'outskirts',
   envName: 'CYBER OUTSKIRTS',
+  combo: 0,
+  comboMult: 1,
+  danger: 0,
 }
 
 /** seconds of run time before the score reaches full musical intensity */
@@ -63,6 +66,7 @@ export default function GameScreen({
   const [gameOver, setGameOver] = useState<RunStats | null>(null)
   const [newAchievements, setNewAchievements] = useState<string[]>([])
   const [submitStatus, setSubmitStatus] = useState<SubmitStatus>('idle')
+  const [globalRank, setGlobalRank] = useState<number | null>(null)
   const bankedRef = useRef(false)
 
   useEffect(() => {
@@ -80,6 +84,7 @@ export default function GameScreen({
     setChoices(null)
     setPaused(false)
     setGameOver(null)
+    setGlobalRank(null)
     setSubmitStatus(isGlobalLeaderboardEnabled() ? 'idle' : 'disabled')
 
     const controls = createGame(canvas, {
@@ -90,8 +95,12 @@ export default function GameScreen({
       callbacks: {
         onHud: (h) => {
           setHud(h)
-          musicRef.current?.setIntensity(h.time / INTENSITY_RAMP)
+          // score reacts to the run: slow ramp over time + how hairy it is right now
+          musicRef.current?.setIntensity(
+            Math.min(1, (h.time / INTENSITY_RAMP) * 0.6 + h.danger * 0.55),
+          )
           musicRef.current?.setBoss(h.bossMaxHp > 0)
+          musicRef.current?.setLowHp(h.hp > 0 && h.hp / h.maxHp < 0.3)
           if (h.envId !== lastEnvIdRef.current) {
             lastEnvIdRef.current = h.envId
             musicRef.current?.setTheme(h.envId)
@@ -111,7 +120,10 @@ export default function GameScreen({
               level: stats.level,
               bosses: stats.bossesKilled,
               characterId: save.selectedCharacter,
-            }).then((ok) => setSubmitStatus(ok ? 'ok' : 'error'))
+            }).then(async (ok) => {
+              setSubmitStatus(ok ? 'ok' : 'error')
+              if (ok) setGlobalRank(await fetchRankFor(stats.time))
+            })
           }
         },
       },
@@ -176,6 +188,7 @@ export default function GameScreen({
           newAchievements={newAchievements}
           playerName={save.playerName}
           submitStatus={submitStatus}
+          globalRank={globalRank}
           onRetry={onRetry}
           onMenu={onMenu}
         />

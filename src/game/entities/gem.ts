@@ -7,7 +7,7 @@
 
 import { sfx } from '../audio'
 import { spawnBurst } from '../systems/particles'
-import { PALETTE } from '../config'
+import { PALETTE, comboMultiplier } from '../config'
 import type { GameState } from '../types'
 
 const PICKUP_DIST = 18
@@ -78,12 +78,14 @@ export function updateGems(state: GameState, dt: number) {
     g.y += g.vy * dt
 
     if (dist < PICKUP_DIST) {
+      // active kill-streak multiplies everything collected
+      const mult = comboMultiplier(state.combo)
       if (g.isCoin) {
-        state.coins += g.value
+        state.coins += Math.round(g.value * mult)
         sfx.coin()
         spawnBurst(state, g.x, g.y, PALETTE.coin, 5, 90, 2.5, 0.35, true)
       } else {
-        state.xp += g.value
+        state.xp += Math.round(g.value * mult)
         sfx.gem()
         spawnBurst(state, g.x, g.y, PALETTE.xp, 4, 80, 2.5, 0.3, true)
       }

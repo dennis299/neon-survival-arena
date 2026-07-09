@@ -1,4 +1,7 @@
-import { basePlayerStats } from '../config'
+import { DASH, basePlayerStats } from '../config'
+import { sfx } from '../audio'
+import { haptics } from '../haptics'
+import { spawnBurst } from '../systems/particles'
 import type { CharacterDef, Player } from '../types'
 import type { InputState } from '../input'
 import type { GameState } from '../types'
@@ -18,13 +21,40 @@ export function createPlayer(character: CharacterDef): Player {
     iframes: 0,
     novaT: 0,
     triggerNova: false,
+    dashT: 0,
+    dashCd: 0,
+    dashDirX: 0,
+    dashDirY: 0,
   }
 }
 
-export function updatePlayer(state: GameState, input: InputState, dt: number) {
+export function updatePlayer(state: GameState, input: InputState, dashRequested: boolean, dt: number) {
   const p = state.player
-  p.x += input.moveX * p.speed * dt
-  p.y += input.moveY * p.speed * dt
+
+  p.dashCd = Math.max(0, p.dashCd - dt)
+  if (dashRequested && p.dashCd <= 0 && !state.dying) {
+    // dash along current movement, or where you're aiming when standing still
+    const moving = input.moveX !== 0 || input.moveY !== 0
+    p.dashDirX = moving ? input.moveX : Math.cos(p.aim)
+    p.dashDirY = moving ? input.moveY : Math.sin(p.aim)
+    p.dashT = DASH.duration
+    p.dashCd = DASH.cooldown
+    p.iframes = Math.max(p.iframes, DASH.iframes)
+    sfx.dash()
+    haptics.dash()
+    spawnBurst(state, p.x, p.y, '#4dd8ff', 10, 180, 3, 0.3, true)
+  }
+
+  if (p.dashT > 0) {
+    p.dashT -= dt
+    p.x += p.dashDirX * p.speed * DASH.speedMult * dt
+    p.y += p.dashDirY * p.speed * DASH.speedMult * dt
+    // afterimage trail
+    spawnBurst(state, p.x, p.y, '#8ef6ff', 2, 20, 3.5, 0.28, true)
+  } else {
+    p.x += input.moveX * p.speed * dt
+    p.y += input.moveY * p.speed * dt
+  }
 
   if (input.aiming) {
     p.aim = input.aim

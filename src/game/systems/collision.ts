@@ -3,16 +3,27 @@
 // kill sweep with drops. This is the hot path — everything is O(n) with
 // small constant lookups.
 
-import { ENEMY_COLORS, PALETTE } from '../config'
+import { COMBO, ENEMY_COLORS, PALETTE, comboMultiplier } from '../config'
 import { sfx } from '../audio'
 import { haptics } from '../haptics'
 import { dropCoin, dropGem } from '../entities/gem'
 import { addText, spawnBurst, spawnExplosionFx } from './particles'
-import type { Boss, Bullet, Enemy, GameState } from '../types'
+import type { Boss, Bullet, Enemy, EnemyKind, GameState } from '../types'
 
 const CELL = 72
 const HURT_IFRAMES = 0.6
 const COIN_DROP_CHANCE = 0.08
+
+/** blame labels for the "KILLED BY" line on the recap screen */
+export const KILLER_NAMES: Record<EnemyKind, string> = {
+  bug: 'A BUG',
+  tank: 'A TANK',
+  sniper: 'A SNIPER',
+  drone: 'A DRONE',
+  boomer: 'A BOOMER',
+  ninja: 'A NINJA',
+  shield: 'A SHIELD GUARD',
+}
 
 type Grid = Map<number, Enemy[]>
 
@@ -239,18 +250,19 @@ export function resolveCollisions(state: GameState) {
     }
   }
 
-  // --- kill sweep: drops, boomer detonation ---
+  // --- kill sweep: drops, combo streak, boomer detonation ---
   for (const e of state.enemies) {
     if (e.dead || e.hp > 0) continue
     e.dead = true
     state.kills++
+    bumpCombo(state)
     if (e.kind === 'boomer') {
       // detonates on death regardless of cause
       sfx.explosion()
       spawnExplosionFx(state, e.x, e.y, 70)
       const d = Math.hypot(p.x - e.x, p.y - e.y)
       if (d < 70 + 12 && p.iframes <= 0 && e.phase === 2) {
-        hurtPlayer(state, e.damage)
+        hurtPlayer(state, e.damage, 'A BOOMER BLAST')
       }
     } else {
       sfx.enemyDie()
@@ -271,9 +283,11 @@ export function resolveCollisions(state: GameState) {
     state.boss = null
     state.bossesKilled++
     state.kills++
+    bumpCombo(state)
     sfx.bossDie()
     haptics.bossDie()
     state.shake += 26
+    state.hitStop = Math.max(state.hitStop, 0.22)
     spawnBurst(state, boss.x, boss.y, '#ffd23e', 60, 340, 6, 1, true)
     spawnBurst(state, boss.x, boss.y, '#ff5db1', 40, 260, 5, 0.8, true)
     for (let i = 0; i < 12; i++) dropGem(state, boss.x, boss.y, 5)
@@ -302,7 +316,7 @@ export function resolveCollisions(state: GameState) {
       if (e.dead) continue
       const r = e.radius + 12
       if ((e.x - p.x) ** 2 + (e.y - p.y) ** 2 < r * r) {
-        hurtPlayer(state, e.damage)
+        hurtPlayer(state, e.damage, KILLER_NAMES[e.kind])
         break
       }
     }
@@ -315,7 +329,7 @@ export function resolveCollisions(state: GameState) {
       const b = eb[i]
       const r = b.radius + 11
       if ((b.x - p.x) ** 2 + (b.y - p.y) ** 2 < r * r) {
-        hurtPlayer(state, b.damage)
+        hurtPlayer(state, b.damage, b.source)
         eb[i] = eb[eb.length - 1]
         eb.pop()
         break
@@ -327,17 +341,40 @@ export function resolveCollisions(state: GameState) {
   if (boss && !boss.dead && !boss.hidden && p.iframes <= 0) {
     const r = boss.radius + 11
     if ((boss.x - p.x) ** 2 + (boss.y - p.y) ** 2 < r * r) {
-      hurtPlayer(state, boss.damage)
+      hurtPlayer(state, boss.damage, `THE ${boss.name}`)
     }
   }
 }
 
-function hurtPlayer(state: GameState, damage: number) {
+/** register a kill in the streak; announces each new multiplier tier */
+function bumpCombo(state: GameState) {
+  const before = comboMultiplier(state.combo)
+  state.combo++
+  state.comboT = COMBO.window
+  state.maxCombo = Math.max(state.maxCombo, state.combo)
+  const after = comboMultiplier(state.combo)
+  if (after > before) {
+    const p = state.player
+    addText(state, p.x, p.y - 34, `COMBO ×${after}`, '#ffd23e', 18)
+    sfx.comboTier(after)
+  }
+}
+
+function hurtPlayer(state: GameState, damage: number, source: string) {
   const p = state.player
+  if (state.dying) return
   p.hp -= damage
   p.iframes = HURT_IFRAMES
   p.hurtFlash = 0.25
   state.shake += 8
+  state.hitStop = Math.max(state.hitStop, 0.06)
+  state.lastHitBy = source
+  if (comboMultiplier(state.combo) > 1) {
+    addText(state, p.x, p.y - 38, 'COMBO BROKEN', '#ff3d6e', 14)
+    sfx.comboBreak()
+  }
+  state.combo = 0
+  state.comboT = 0
   sfx.hurt()
   haptics.hurt()
   addText(state, p.x, p.y - 20, `-${Math.round(damage)}`, PALETTE.hp, 15)

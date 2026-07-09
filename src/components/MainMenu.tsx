@@ -163,9 +163,9 @@ export default function MainMenu({
             </label>
           </div>
           <p className="controls-hint">
-            desktop: WASD move · mouse aim · auto-fire · P pause
+            desktop: WASD move · mouse aim · auto-fire · SPACE dash · P pause
             <br />
-            mobile: left thumb move · right thumb aim
+            mobile: left thumb move · right thumb aim · DASH button
           </p>
         </>
       )}

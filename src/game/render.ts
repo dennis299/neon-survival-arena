@@ -3,10 +3,10 @@
 // for hundreds of entities), dark grid arena, camera locked to the player
 // with decaying screen shake.
 
-import { ENEMY_COLORS, PALETTE } from './config'
+import { DASH, ENEMY_COLORS, PALETTE } from './config'
 import { ENVIRONMENTS } from './environments'
 import type { Boss, Enemy, GameState } from './types'
-import type { InputState } from './input'
+import { DASH_BTN_OFFSET, DASH_BTN_RADIUS, type InputState } from './input'
 
 const glowCache = new Map<string, HTMLCanvasElement>()
 
@@ -127,7 +127,15 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, bgColor: string) {
   }
 }
 
-function drawBoss(ctx: CanvasRenderingContext2D, b: Boss, time: number, bgColor: string) {
+function drawBoss(
+  ctx: CanvasRenderingContext2D,
+  b: Boss,
+  time: number,
+  bgColor: string,
+  px: number,
+  py: number,
+) {
+  const flashPulse = 0.4 + Math.abs(Math.sin(time * 14)) * 0.6
   if (b.hidden) {
     // rumbling ground marker
     const pulse = 1 + Math.sin(time * 18) * 0.2
@@ -137,6 +145,16 @@ function drawBoss(ctx: CanvasRenderingContext2D, b: Boss, time: number, bgColor:
     ctx.lineWidth = 3
     ctx.stroke()
     drawGlow(ctx, b.x, b.y, 40, '#b464ff', 0.35)
+    // eruption telegraph: danger ring flares in the last half-second underground
+    if (b.t > 1.2) {
+      const t = Math.min(1, (b.t - 1.2) / 0.5)
+      ctx.beginPath()
+      ctx.arc(b.x, b.y, 70 - t * 30, 0, Math.PI * 2)
+      ctx.strokeStyle = `rgba(255, 61, 110, ${flashPulse * (0.4 + t * 0.6)})`
+      ctx.lineWidth = 4
+      ctx.stroke()
+      drawGlow(ctx, b.x, b.y, 60, '#ff3d6e', flashPulse * 0.5)
+    }
     return
   }
   const colors: Record<Boss['kind'], string> = {
@@ -146,6 +164,40 @@ function drawBoss(ctx: CanvasRenderingContext2D, b: Boss, time: number, bgColor:
   }
   const c = b.hitFlash > 0 ? '#ffffff' : colors[b.kind]
   drawGlow(ctx, b.x, b.y, b.radius * 2.6, colors[b.kind], 0.6)
+
+  // attack telegraphs — every big hit gets a visible wind-up so deaths feel fair
+  if (b.kind === 'robot') {
+    if (b.attackT > 3.5) {
+      // rocket volley: aim rays sweep out along the three launch angles
+      for (let i = -1; i <= 1; i++) {
+        const a = b.angle + i * 0.25
+        ctx.beginPath()
+        ctx.moveTo(b.x + Math.cos(a) * b.radius, b.y + Math.sin(a) * b.radius)
+        ctx.lineTo(b.x + Math.cos(a) * 240, b.y + Math.sin(a) * 240)
+        ctx.strokeStyle = `rgba(255, 154, 61, ${flashPulse * 0.5})`
+        ctx.lineWidth = 2
+        ctx.stroke()
+      }
+    }
+    if (b.t > 5.2 && Math.hypot(px - b.x, py - b.y) < 200) {
+      // ground slam: expanding warning ring around the blast zone
+      ctx.beginPath()
+      ctx.arc(b.x, b.y, 150, 0, Math.PI * 2)
+      ctx.strokeStyle = `rgba(255, 61, 110, ${flashPulse * 0.55})`
+      ctx.lineWidth = 3
+      ctx.stroke()
+    }
+  }
+  if (b.kind === 'queen' && b.attackT > 3.0) {
+    // radial burst: a ring collapses into the queen as the shot charges
+    const t = Math.min(1, (b.attackT - 3.0) / 0.4)
+    ctx.beginPath()
+    ctx.arc(b.x, b.y, b.radius + 26 - t * 22, 0, Math.PI * 2)
+    ctx.strokeStyle = `rgba(255, 93, 177, ${0.3 + t * 0.6})`
+    ctx.lineWidth = 3
+    ctx.stroke()
+  }
+
   switch (b.kind) {
     case 'robot':
       drawPoly(ctx, b.x, b.y, b.radius, 4, Math.PI / 4, c, true)
@@ -192,6 +244,12 @@ export function render(
   const camY = p.y - h / 2 + shakeY
 
   ctx.save()
+  // death cinematic zoom — scales the world around the screen center (player)
+  if (state.zoom !== 1) {
+    ctx.translate(w / 2, h / 2)
+    ctx.scale(state.zoom, state.zoom)
+    ctx.translate(-w / 2, -h / 2)
+  }
   ctx.translate(-camX, -camY)
 
   // grid
@@ -251,7 +309,7 @@ export function render(
   for (const e of state.enemies) drawEnemy(ctx, e, env.bg)
 
   // boss
-  if (state.boss) drawBoss(ctx, state.boss, state.time, env.bg)
+  if (state.boss) drawBoss(ctx, state.boss, state.time, env.bg, p.x, p.y)
 
   // drones
   for (const d of state.droneUnits) {
@@ -263,7 +321,7 @@ export function render(
 
   // player — glowing orb
   const flash = p.hurtFlash > 0 && Math.sin(state.time * 40) > 0
-  drawGlow(ctx, p.x, p.y, 34, PALETTE.player, flash ? 0.4 : 1)
+  drawGlow(ctx, p.x, p.y, p.dashT > 0 ? 48 : 34, PALETTE.player, flash ? 0.4 : 1)
   ctx.beginPath()
   ctx.arc(p.x, p.y, 11, 0, Math.PI * 2)
   ctx.fillStyle = flash ? PALETTE.hp : PALETTE.playerCore
@@ -275,6 +333,15 @@ export function render(
   ctx.strokeStyle = PALETTE.player
   ctx.lineWidth = 3
   ctx.stroke()
+  // dash cooldown ring: sweeps closed while recharging, flares when ready
+  if (p.dashCd > 0) {
+    const frac = 1 - p.dashCd / DASH.cooldown
+    ctx.beginPath()
+    ctx.arc(p.x, p.y, 17, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2)
+    ctx.strokeStyle = 'rgba(142, 246, 255, 0.55)'
+    ctx.lineWidth = 2.5
+    ctx.stroke()
+  }
 
   // particles
   for (const pt of state.particles) {
@@ -327,13 +394,21 @@ export function render(
     ctx.fillText('⚠ BOSS INCOMING ⚠', w / 2, h * 0.22)
   }
 
-  // low-hp vignette
-  if (p.hp / p.maxHp < 0.3) {
-    const a = (0.3 - p.hp / p.maxHp) * 1.4
+  // low-hp vignette — throbs like a heartbeat instead of sitting static
+  if (p.hp / p.maxHp < 0.3 && p.hp > 0) {
+    const throb = 0.75 + 0.25 * Math.sin(state.time * 5.5)
+    const a = (0.3 - p.hp / p.maxHp) * 1.4 * throb
     const grad = ctx.createRadialGradient(w / 2, h / 2, h * 0.35, w / 2, h / 2, h * 0.75)
     grad.addColorStop(0, 'rgba(255,0,60,0)')
     grad.addColorStop(1, `rgba(255,0,60,${Math.min(0.45, a)})`)
     ctx.fillStyle = grad
+    ctx.fillRect(0, 0, w, h)
+  }
+
+  // death cinematic: fade the arena down as the recap approaches
+  if (state.dying) {
+    const t = Math.min(1, Math.max(0, 1 - state.deathT / 1.3))
+    ctx.fillStyle = `rgba(5, 4, 12, ${t * 0.55})`
     ctx.fillRect(0, 0, w, h)
   }
 
@@ -351,5 +426,27 @@ export function render(
       ctx.fillStyle = 'rgba(140, 200, 255, 0.35)'
       ctx.fill()
     }
+    // dash button — fills as the cooldown recharges
+    const bx = w - DASH_BTN_OFFSET
+    const by = h - DASH_BTN_OFFSET
+    const ready = p.dashCd <= 0
+    const frac = ready ? 1 : 1 - p.dashCd / DASH.cooldown
+    ctx.beginPath()
+    ctx.arc(bx, by, DASH_BTN_RADIUS, 0, Math.PI * 2)
+    ctx.fillStyle = ready ? 'rgba(77, 216, 255, 0.28)' : 'rgba(140, 200, 255, 0.12)'
+    ctx.fill()
+    ctx.strokeStyle = ready ? 'rgba(142, 246, 255, 0.8)' : 'rgba(140, 200, 255, 0.3)'
+    ctx.lineWidth = 2.5
+    ctx.stroke()
+    if (!ready) {
+      ctx.beginPath()
+      ctx.arc(bx, by, DASH_BTN_RADIUS, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2)
+      ctx.strokeStyle = 'rgba(142, 246, 255, 0.7)'
+      ctx.stroke()
+    }
+    ctx.fillStyle = ready ? 'rgba(234, 255, 255, 0.95)' : 'rgba(180, 210, 255, 0.4)'
+    ctx.font = "bold 15px 'Courier New', monospace"
+    ctx.textAlign = 'center'
+    ctx.fillText('DASH', bx, by + 5)
   }
 }

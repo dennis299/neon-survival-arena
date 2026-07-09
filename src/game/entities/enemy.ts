@@ -98,6 +98,7 @@ export function updateEnemies(state: GameState, dt: number) {
             damage: e.damage,
             radius: 5,
             life: 2.4,
+            source: 'A SNIPER SHOT',
           })
         }
         break

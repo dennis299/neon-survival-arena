@@ -40,7 +40,15 @@ export function createBoss(state: GameState, cycle: number): Boss {
   }
 }
 
-function radialBurst(state: GameState, x: number, y: number, count: number, speed: number, damage: number) {
+function radialBurst(
+  state: GameState,
+  x: number,
+  y: number,
+  count: number,
+  speed: number,
+  damage: number,
+  source: string,
+) {
   for (let i = 0; i < count; i++) {
     const a = (i / count) * Math.PI * 2
     state.enemyBullets.push({
@@ -51,6 +59,7 @@ function radialBurst(state: GameState, x: number, y: number, count: number, spee
       damage,
       radius: 6,
       life: 3,
+      source,
     })
   }
 }
@@ -86,12 +95,13 @@ export function updateBoss(state: GameState, dt: number) {
             damage: b.damage,
             radius: 8,
             life: 3.2,
+            source: "THE GIANT ROBOT'S ROCKETS",
           })
         }
       }
       if (dist < 150 && b.t > 6) {
         b.t = 0
-        radialBurst(state, b.x, b.y, 16, 220, b.damage * 0.7)
+        radialBurst(state, b.x, b.y, 16, 220, b.damage * 0.7, "THE GIANT ROBOT'S SLAM")
         state.shake += 18
         spawnBurst(state, b.x, b.y, '#ff9a3d', 30, 260, 5, 0.7, true)
       }
@@ -121,7 +131,7 @@ export function updateBoss(state: GameState, dt: number) {
           b.t = 0
           b.phase = 0
           b.hidden = false
-          radialBurst(state, b.x, b.y, 12, 240, b.damage * 0.8)
+          radialBurst(state, b.x, b.y, 12, 240, b.damage * 0.8, "THE CYBER WORM'S ERUPTION")
           state.shake += 14
           spawnBurst(state, b.x, b.y, '#b464ff', 34, 300, 5, 0.8, true)
         }
@@ -134,7 +144,7 @@ export function updateBoss(state: GameState, dt: number) {
       b.vy = ny * b.speed
       if (b.attackT > 3.4) {
         b.attackT = 0
-        radialBurst(state, b.x, b.y, 14, 190, b.damage * 0.75)
+        radialBurst(state, b.x, b.y, 14, 190, b.damage * 0.75, "THE ALIEN QUEEN'S BURST")
       }
       if (b.t > 5.5) {
         b.t = 0

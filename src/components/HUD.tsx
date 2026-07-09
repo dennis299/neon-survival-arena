@@ -27,6 +27,11 @@ export default function HUD({ hud, onPause }: { hud: HudSnapshot; onPause: () =>
         <div className="hud-center">
           <div className="hud-timer">{formatTime(hud.time)}</div>
           <div className="env-label">{hud.envName}</div>
+          {hud.combo >= 3 && (
+            <div className={`combo-meter${hud.comboMult > 1 ? ' hot' : ''}`}>
+              {hud.combo} COMBO{hud.comboMult > 1 ? ` ×${hud.comboMult}` : ''}
+            </div>
+          )}
         </div>
         <div className="hud-right-group">
           <div className="hud-right">

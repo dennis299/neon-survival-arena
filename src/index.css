@@ -494,6 +494,28 @@ button {
   margin-top: 1px;
 }
 
+.combo-meter {
+  margin-top: 3px;
+  font-size: 12px;
+  font-weight: bold;
+  letter-spacing: 0.18em;
+  color: var(--cyan);
+  text-shadow: 0 0 10px rgba(77, 216, 255, 0.7);
+}
+
+.combo-meter.hot {
+  color: var(--gold);
+  text-shadow: 0 0 12px var(--gold);
+  animation: combo-pulse 0.5s ease-in-out infinite;
+}
+
+@keyframes combo-pulse {
+  50% {
+    transform: scale(1.12);
+    opacity: 0.8;
+  }
+}
+
 .hud-right-group {
   display: flex;
   align-items: flex-start;
@@ -708,6 +730,21 @@ button {
 }
 
 /* ---------- game over recap ---------- */
+
+.killed-by {
+  color: var(--dim);
+  letter-spacing: 0.2em;
+  font-size: 12px;
+  margin-top: -6px;
+}
+
+.global-rank {
+  color: var(--cyan);
+  letter-spacing: 0.24em;
+  font-size: 15px;
+  font-weight: bold;
+  text-shadow: 0 0 14px rgba(77, 216, 255, 0.7);
+}
 
 .new-best {
   color: var(--gold);

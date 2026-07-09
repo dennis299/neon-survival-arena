@@ -51,6 +51,33 @@ export const ENEMY_DEFS: Record<EnemyKind, EnemyDef> = {
   shield: { hp: 45, speed: 55, radius: 14, damage: 12, xp: 6, unlockAt: 420, weight: 22 },
 }
 
+export const DASH = {
+  /** seconds of burst movement */
+  duration: 0.16,
+  /** move-speed multiplier while dashing */
+  speedMult: 3.4,
+  cooldown: 2.6,
+  /** i-frames granted on dash start (covers the burst + a grace beat) */
+  iframes: 0.26,
+} as const
+
+export const COMBO = {
+  /** seconds between kills before the streak breaks */
+  window: 2.0,
+  /** streak thresholds and the XP/coin multiplier each grants */
+  tiers: [
+    { at: 40, mult: 3 },
+    { at: 20, mult: 2 },
+    { at: 10, mult: 1.5 },
+    { at: 5, mult: 1.25 },
+  ],
+} as const
+
+export function comboMultiplier(combo: number): number {
+  for (const t of COMBO.tiers) if (combo >= t.at) return t.mult
+  return 1
+}
+
 export const DIFFICULTY = {
   /** spawn interval: start → floor, eased over rampTime seconds */
   spawnStart: 1.1,

@@ -49,6 +49,21 @@ export async function submitScore(entry: {
   }
 }
 
+/** 1-based global rank of a finished run: rows with a strictly better time + 1 */
+export async function fetchRankFor(timeSeconds: number): Promise<number | null> {
+  if (!supabase) return null
+  try {
+    const { count, error } = await supabase
+      .from('scores')
+      .select('*', { count: 'exact', head: true })
+      .gt('time_seconds', Math.max(1, Math.round(timeSeconds)))
+    if (error || count === null) return null
+    return count + 1
+  } catch {
+    return null
+  }
+}
+
 export async function fetchTopScores(limit = 10): Promise<GlobalScore[]> {
   if (!supabase) return []
   try {

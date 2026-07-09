@@ -149,6 +149,20 @@ export const sfx = {
     if (throttled('hurt', 200)) return
     tone(160, 0.25, 'sawtooth', 0.25, 60)
   },
+  dash() {
+    if (throttled('dash', 150)) return
+    noise(0.14, 0.14, 3200, 400)
+    tone(340, 0.12, 'sine', 0.12, 680)
+  },
+  /** rising fanfare pitched by the streak multiplier tier */
+  comboTier(mult: number) {
+    const base = 660 + mult * 120
+    tone(base, 0.1, 'square', 0.1)
+    setTimeout(() => tone(base * 1.25, 0.12, 'square', 0.1), 70)
+  },
+  comboBreak() {
+    tone(520, 0.16, 'sawtooth', 0.12, 180)
+  },
   levelUp() {
     ;[523, 659, 784, 1047].forEach((f, i) => {
       setTimeout(() => tone(f, 0.18, 'triangle', 0.16), i * 90)

@@ -93,6 +93,8 @@ export interface EnemyBullet {
   damage: number
   radius: number
   life: number
+  /** what to blame on the death screen if this projectile lands the kill */
+  source: string
 }
 
 export interface Gem {
@@ -182,6 +184,12 @@ export interface Player extends PlayerStats {
   iframes: number
   novaT: number
   triggerNova: boolean
+  /** seconds of dash burst remaining (0 = not dashing) */
+  dashT: number
+  /** seconds until the dash is ready again */
+  dashCd: number
+  dashDirX: number
+  dashDirY: number
 }
 
 export interface UpgradeDef {
@@ -218,6 +226,9 @@ export interface RunStats {
   coins: number
   bossesKilled: number
   damageDealt: number
+  maxCombo: number
+  /** what landed the killing blow, e.g. "GIANT ROBOT" */
+  killedBy: string
   upgrades: { name: string; level: number; icon: string; color: string }[]
   newBest: boolean
 }
@@ -237,6 +248,10 @@ export interface HudSnapshot {
   fps: number
   envId: string
   envName: string
+  combo: number
+  comboMult: number
+  /** 0..1 how hairy things are right now — drives the music's intensity */
+  danger: number
 }
 
 export interface GameCallbacks {
@@ -282,4 +297,20 @@ export interface GameState {
   envBannerT: number
   /** caps particle/ambient counts for battery/perf on lower-end devices */
   lowEffects: boolean
+  /** kill-streak count; decays when the combo window lapses */
+  combo: number
+  /** seconds left in the combo window */
+  comboT: number
+  maxCombo: number
+  /** seconds of frame-freeze remaining (impact frames) */
+  hitStop: number
+  /** sim speed, 1 = normal; the death slow-mo ramps this down */
+  timeScale: number
+  /** death cinematic in progress — sim keeps running slow, input ignored */
+  dying: boolean
+  deathT: number
+  /** camera zoom, eased toward deathZoom during the death cinematic */
+  zoom: number
+  /** last thing that damaged the player, blamed on the recap screen */
+  lastHitBy: string
 }

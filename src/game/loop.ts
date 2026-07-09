@@ -2,7 +2,7 @@
 // GameState. React talks to it only through the returned controls and the
 // GameCallbacks — no React state inside the hot path.
 
-import { CHARACTERS, UPGRADES, xpForLevel } from './config'
+import { CHARACTERS, UPGRADES, comboMultiplier, xpForLevel } from './config'
 import { ENVIRONMENTS, nextEnvIndex, randomEnvDuration } from './environments'
 import { createInput } from './input'
 import { createPlayer, updatePlayer } from './entities/player'
@@ -77,6 +77,15 @@ export function createGame(canvas: HTMLCanvasElement, opts: GameOptions): GameCo
     envT: randomEnvDuration(),
     envBannerT: 2.6,
     lowEffects: opts.lowEffects,
+    combo: 0,
+    comboT: 0,
+    maxCombo: 0,
+    hitStop: 0,
+    timeScale: 1,
+    dying: false,
+    deathT: 0,
+    zoom: 1,
+    lastHitBy: 'THE SWARM',
   }
   resetAmbient(state, ENVIRONMENTS[state.envIndex].ambient, state.lowEffects)
 
@@ -100,6 +109,11 @@ export function createGame(canvas: HTMLCanvasElement, opts: GameOptions): GameCo
   window.addEventListener('resize', resize)
 
   function pushHud() {
+    // danger drives the music's intensity: swarm density + an active boss
+    const danger = Math.min(
+      1,
+      state.enemies.length / 120 + (state.boss && !state.boss.dead ? 0.45 : 0),
+    )
     opts.callbacks.onHud({
       hp: state.player.hp,
       maxHp: state.player.maxHp,
@@ -115,6 +129,9 @@ export function createGame(canvas: HTMLCanvasElement, opts: GameOptions): GameCo
       fps,
       envId: ENVIRONMENTS[state.envIndex].id,
       envName: ENVIRONMENTS[state.envIndex].name,
+      combo: state.combo,
+      comboMult: comboMultiplier(state.combo),
+      danger,
     })
   }
 
@@ -130,6 +147,8 @@ export function createGame(canvas: HTMLCanvasElement, opts: GameOptions): GameCo
       coins: state.coins,
       bossesKilled: state.bossesKilled,
       damageDealt: Math.round(state.damageDealt),
+      maxCombo: state.maxCombo,
+      killedBy: state.lastHitBy,
       upgrades,
       newBest: state.time > opts.bestTime,
     }
@@ -139,8 +158,8 @@ export function createGame(canvas: HTMLCanvasElement, opts: GameOptions): GameCo
     state.time += dt
 
     const inp = input.poll(viewW / 2, viewH / 2)
-    updatePlayer(state, inp, dt)
-    firePlayerWeapon(state, dt)
+    updatePlayer(state, inp, input.consumeDash(), dt)
+    if (!state.dying) firePlayerWeapon(state, dt)
     updateDrones(state, dt)
     updateBullets(state, dt)
     updateEnemies(state, dt)
@@ -161,8 +180,16 @@ export function createGame(canvas: HTMLCanvasElement, opts: GameOptions): GameCo
     state.envBannerT = Math.max(0, state.envBannerT - dt)
     updateAmbient(state, dt, ENVIRONMENTS[state.envIndex].ambient)
 
+    // combo window: streak decays if the kills stop coming
+    if (state.comboT > 0) {
+      state.comboT -= dt
+      if (state.comboT <= 0) {
+        state.combo = 0
+      }
+    }
+
     // level-up: pause the sim and hand choices to React
-    if (state.xp >= state.xpNeeded && !levelUpPending) {
+    if (state.xp >= state.xpNeeded && !levelUpPending && !state.dying) {
       state.xp -= state.xpNeeded
       state.level++
       state.xpNeeded = xpForLevel(state.level + 1)
@@ -174,13 +201,12 @@ export function createGame(canvas: HTMLCanvasElement, opts: GameOptions): GameCo
       opts.callbacks.onLevelUp(rollChoices(state))
     }
 
-    // death
-    if (state.player.hp <= 0 && !state.over) {
-      state.over = true
-      state.running = false
+    // death: don't cut straight to the recap — 1.3s of slow-mo zoom first
+    if (state.player.hp <= 0 && !state.dying && !state.over) {
+      state.dying = true
+      state.deathT = 1.3
+      state.hitStop = Math.max(state.hitStop, 0.12)
       sfx.gameOver()
-      pushHud()
-      opts.callbacks.onGameOver(buildRunStats())
     }
   }
 
@@ -190,12 +216,30 @@ export function createGame(canvas: HTMLCanvasElement, opts: GameOptions): GameCo
     last = now
     if (rawDt > 0) fps = fps * 0.95 + (1 / rawDt) * 0.05
 
-    if (input.consumePause() && !levelUpPending && !state.over) {
+    if (input.consumePause() && !levelUpPending && !state.over && !state.dying) {
       state.paused = !state.paused
     }
 
     if (state.running && !state.paused) {
-      update(Math.min(rawDt, MAX_DT))
+      // death cinematic: sim crawls, camera pushes in, then the recap fires
+      if (state.dying) {
+        state.timeScale += (0.22 - state.timeScale) * Math.min(1, rawDt * 10)
+        state.zoom += (1.35 - state.zoom) * Math.min(1, rawDt * 3)
+        state.deathT -= rawDt
+        if (state.deathT <= 0 && !state.over) {
+          state.over = true
+          state.running = false
+          pushHud()
+          opts.callbacks.onGameOver(buildRunStats())
+        }
+      }
+
+      // impact frames: freeze the sim for a few ms but keep rendering
+      if (state.hitStop > 0) {
+        state.hitStop -= rawDt
+      } else {
+        update(Math.min(rawDt, MAX_DT) * state.timeScale)
+      }
       hudT -= rawDt
       if (hudT <= 0) {
         hudT = HUD_INTERVAL
