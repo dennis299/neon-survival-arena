@@ -25,6 +25,8 @@ export default function GameOver({
   playerName,
   submitStatus,
   globalRank,
+  dailyName,
+  dailyPractice,
   onRetry,
   onMenu,
 }: {
@@ -33,12 +35,22 @@ export default function GameOver({
   playerName: string
   submitStatus: SubmitStatus
   globalRank: number | null
+  /** daily-challenge run: the day's modifier name (null for normal runs) */
+  dailyName: string | null
+  /** replay after today's real attempt — not submitted anywhere */
+  dailyPractice: boolean
   onRetry: () => void
   onMenu: () => void
 }) {
   return (
     <div className="overlay">
       <h2 className="overlay-title glow-text danger-text">RUN OVER</h2>
+      {dailyName && (
+        <div className="daily-recap">
+          📅 DAILY CHALLENGE — {dailyName.toUpperCase()}
+          {dailyPractice && <span className="daily-practice"> · PRACTICE</span>}
+        </div>
+      )}
       <div className="killed-by">☠ KILLED BY {stats.killedBy}</div>
       {stats.newBest && <div className="new-best">★ NEW BEST TIME ★</div>}
       {globalRank !== null && (

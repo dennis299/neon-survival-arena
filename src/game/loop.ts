@@ -2,8 +2,9 @@
 // GameState. React talks to it only through the returned controls and the
 // GameCallbacks — no React state inside the hot path.
 
-import { CHARACTERS, CHEST, EVOLUTIONS, PALETTE, UPGRADES, comboMultiplier, xpForLevel } from './config'
+import { CHARACTERS, CHEST, EVOLUTIONS, PALETTE, UPGRADES, comboMultiplier, defaultRunMods, xpForLevel } from './config'
 import { ENVIRONMENTS, nextEnvIndex, randomEnvDuration } from './environments'
+import { seedRng } from './rng'
 import { createInput } from './input'
 import { createPlayer, updatePlayer } from './entities/player'
 import { firePlayerWeapon, updateBullets, updateDrones } from './entities/bullet'
@@ -19,13 +20,19 @@ import { resetAmbient, updateAmbient } from './systems/ambient'
 import { render } from './render'
 import { sfx } from './audio'
 import { haptics } from './haptics'
-import type { EvolutionDef, GameCallbacks, GameState, RunStats, UpgradeDef } from './types'
+import type { DailyModDef, EvolutionDef, GameCallbacks, GameState, RunStats, UpgradeDef } from './types'
 
 export interface GameOptions {
   characterId: string
   shakeScale: number
   bestTime: number
   lowEffects: boolean
+  /** fixed seed for the sim's RNG (daily challenge); null = entropy */
+  seed: number | null
+  /** active daily-challenge modifier; null for normal runs */
+  dailyMod: DailyModDef | null
+  /** rank per permanent-upgrade id (SaveData.permUpgrades) */
+  permUpgrades: Record<string, number>
   callbacks: GameCallbacks
 }
 
@@ -47,6 +54,10 @@ export function createGame(canvas: HTMLCanvasElement, opts: GameOptions): GameCo
   const input = createInput(canvas)
   const character = CHARACTERS.find((c) => c.id === opts.characterId) ?? CHARACTERS[0]
 
+  // seed once per run, before anything draws from the sim RNG
+  seedRng(opts.seed)
+  const mods = defaultRunMods()
+
   const state: GameState = {
     time: 0,
     kills: 0,
@@ -59,7 +70,7 @@ export function createGame(canvas: HTMLCanvasElement, opts: GameOptions): GameCo
     running: true,
     paused: false,
     over: false,
-    player: createPlayer(character),
+    player: createPlayer(character, opts.permUpgrades, opts.dailyMod, mods),
     enemies: [],
     bullets: [],
     enemyBullets: [],
@@ -93,8 +104,20 @@ export function createGame(canvas: HTMLCanvasElement, opts: GameOptions): GameCo
     evolutions: [],
     chestPendingRewards: 0,
     flashT: 0,
+    mods,
+    eliteKills: 0,
+    dashes: 0,
+    nukesUsed: 0,
+    chestsOpened: 0,
+    pbBeaten: false,
+    pbBannerT: 0,
   }
   resetAmbient(state, ENVIRONMENTS[state.envIndex].ambient, state.lowEffects)
+
+  // Head Start perm upgrade: enough starting XP for one free level-up per
+  // rank — the normal level-up flow fires immediately and offers the picks
+  const headStart = opts.permUpgrades['headstart'] ?? 0
+  for (let i = 0; i < headStart; i++) state.xp += xpForLevel(2 + i)
 
   let viewW = 0
   let viewH = 0
@@ -141,6 +164,9 @@ export function createGame(canvas: HTMLCanvasElement, opts: GameOptions): GameCo
       envName: ENVIRONMENTS[state.envIndex].name,
       combo: state.combo,
       comboMult: comboMultiplier(state.combo),
+      maxCombo: state.maxCombo,
+      evolutions: state.evolutions.length,
+      bestTime: opts.bestTime,
       danger,
     })
   }
@@ -162,6 +188,11 @@ export function createGame(canvas: HTMLCanvasElement, opts: GameOptions): GameCo
       bossesKilled: state.bossesKilled,
       damageDealt: Math.round(state.damageDealt),
       maxCombo: state.maxCombo,
+      evolutions: state.evolutions.length,
+      eliteKills: state.eliteKills,
+      dashes: state.dashes,
+      nukesUsed: state.nukesUsed,
+      chestsOpened: state.chestsOpened,
       killedBy: state.lastHitBy,
       upgrades,
       newBest: state.time > opts.bestTime,
@@ -195,6 +226,16 @@ export function createGame(canvas: HTMLCanvasElement, opts: GameOptions): GameCo
     }
     state.envBannerT = Math.max(0, state.envBannerT - dt)
     updateAmbient(state, dt, ENVIRONMENTS[state.envIndex].ambient)
+
+    // live PB marker: the moment this run outlasts the previous best
+    // (only for established bests — a 20s first run isn't a record)
+    if (!state.pbBeaten && opts.bestTime >= 60 && state.time > opts.bestTime) {
+      state.pbBeaten = true
+      state.pbBannerT = 3
+      sfx.newRecord()
+      haptics.newRecord()
+    }
+    state.pbBannerT = Math.max(0, state.pbBannerT - dt)
 
     // combo window: streak decays if the kills stop coming
     if (state.comboT > 0) {

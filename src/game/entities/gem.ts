@@ -6,6 +6,7 @@
 // itself is resolved by the loop (it pauses the sim for the picker).
 
 import { sfx } from '../audio'
+import { rng } from '../rng'
 import { spawnBurst } from '../systems/particles'
 import { PALETTE, comboMultiplier } from '../config'
 import type { GameState } from '../types'
@@ -21,21 +22,21 @@ const GEM_MIN_SPEED_PER_MAGNET = 2.6
 export function dropGem(state: GameState, x: number, y: number, value: number) {
   // merge into fewer, bigger gems if the field is saturated (perf guard)
   if (state.gems.length > GEM_CAP) {
-    const g = state.gems[(Math.random() * state.gems.length) | 0]
+    const g = state.gems[(rng() * state.gems.length) | 0]
     if (!g.isCoin) {
       g.value += value
       return
     }
   }
   state.gems.push({
-    x: x + (Math.random() - 0.5) * 14,
-    y: y + (Math.random() - 0.5) * 14,
-    vx: (Math.random() - 0.5) * 60,
-    vy: (Math.random() - 0.5) * 60,
+    x: x + (rng() - 0.5) * 14,
+    y: y + (rng() - 0.5) * 14,
+    vx: (rng() - 0.5) * 60,
+    vy: (rng() - 0.5) * 60,
     value,
     radius: 5 + Math.min(3, value * 0.3),
     isCoin: false,
-    t: Math.random() * 10,
+    t: rng() * 10,
   })
 }
 
@@ -43,12 +44,12 @@ export function dropCoin(state: GameState, x: number, y: number, value: number) 
   state.gems.push({
     x,
     y,
-    vx: (Math.random() - 0.5) * 80,
-    vy: (Math.random() - 0.5) * 80,
+    vx: (rng() - 0.5) * 80,
+    vy: (rng() - 0.5) * 80,
     value,
     radius: 6,
     isCoin: true,
-    t: Math.random() * 10,
+    t: rng() * 10,
   })
 }
 
@@ -81,7 +82,8 @@ export function updateGems(state: GameState, dt: number) {
       // active kill-streak multiplies everything collected
       const mult = comboMultiplier(state.combo)
       if (g.isCoin) {
-        state.coins += Math.round(g.value * mult)
+        // Coin Doubler / Rich Rush stack with the streak multiplier
+        state.coins += Math.round(g.value * mult * p.coinMult)
         sfx.coin()
         spawnBurst(state, g.x, g.y, PALETTE.coin, 5, 90, 2.5, 0.35, true)
       } else {

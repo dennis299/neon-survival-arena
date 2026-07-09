@@ -2,6 +2,7 @@
 
 import { PICKUPS } from '../config'
 import { sfx } from '../audio'
+import { rng } from '../rng'
 import type { Bullet, GameState } from '../types'
 
 const BULLET_LIFE = 1.4
@@ -66,7 +67,7 @@ export function updateDrones(state: GameState, dt: number) {
   const p = state.player
   // keep drone unit count in sync with the stat
   while (state.droneUnits.length < p.drones) {
-    state.droneUnits.push({ angle: Math.random() * Math.PI * 2, fireT: 0 })
+    state.droneUnits.push({ angle: rng() * Math.PI * 2, fireT: 0 })
   }
   for (let i = 0; i < state.droneUnits.length; i++) {
     const d = state.droneUnits[i]

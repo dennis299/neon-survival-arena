@@ -2,6 +2,7 @@
 // multiplier each full cycle. Deaths are resolved in the collision system.
 
 import { BOSS_CYCLE_HP_MULT, BOSS_DEFS } from '../config'
+import { rng } from '../rng'
 import { spawnBurst } from '../systems/particles'
 import { createEnemy } from './enemy'
 import type { Boss, BossKind, GameState } from '../types'
@@ -17,7 +18,7 @@ export function createBoss(state: GameState, cycle: number): Boss {
   const def = BOSS_DEFS[kind]
   const hpMult = Math.pow(BOSS_CYCLE_HP_MULT, Math.floor(cycle / KINDS.length))
   const p = state.player
-  const ang = Math.random() * Math.PI * 2
+  const ang = rng() * Math.PI * 2
   return {
     kind,
     name: def.name,
@@ -150,9 +151,13 @@ export function updateBoss(state: GameState, dt: number) {
         b.t = 0
         const mult = 1 + state.time / 60 * 0.2
         for (let i = 0; i < 5; i++) {
-          const a = Math.random() * Math.PI * 2
+          const a = rng() * Math.PI * 2
           state.enemies.push(
-            createEnemy(state, 'bug', b.x + Math.cos(a) * 50, b.y + Math.sin(a) * 50, mult, 1.1),
+            createEnemy(
+              state, 'bug',
+              b.x + Math.cos(a) * 50, b.y + Math.sin(a) * 50,
+              mult, 1.1 * state.mods.enemySpeedMult,
+            ),
           )
         }
         spawnBurst(state, b.x, b.y, '#ff5db1', 16, 140, 4, 0.6, true)

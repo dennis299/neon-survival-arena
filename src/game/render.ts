@@ -459,6 +459,18 @@ export function render(
     ctx.globalAlpha = 1
   }
 
+  // live personal-best banner — gold, fades like the env banner
+  if (state.pbBannerT > 0) {
+    const t = state.pbBannerT
+    const alpha = t > 2.3 ? (3 - t) / 0.7 : Math.min(1, t / 0.7)
+    ctx.globalAlpha = Math.max(0, Math.min(1, alpha))
+    ctx.fillStyle = PALETTE.coin
+    ctx.font = "bold 26px 'Courier New', monospace"
+    ctx.textAlign = 'center'
+    ctx.fillText('★ NEW RECORD ★', w / 2, h * 0.3)
+    ctx.globalAlpha = 1
+  }
+
   // boss incoming warning — red pulse frame
   if (state.bossWarnT > 0) {
     const pulse = Math.abs(Math.sin(state.time * 8))

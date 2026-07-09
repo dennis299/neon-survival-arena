@@ -231,4 +231,18 @@ export const sfx = {
       setTimeout(() => tone(f, 0.35, 'triangle', 0.2), i * 200)
     })
   },
+  /** short two-note chime for an in-run achievement toast */
+  achievement() {
+    tone(1047, 0.1, 'triangle', 0.14)
+    setTimeout(() => tone(1568, 0.16, 'triangle', 0.12), 90)
+  },
+  /** triumphant rising arpeggio — live personal-best crossed */
+  newRecord() {
+    ;[659, 784, 988, 1319].forEach((f, i) => {
+      setTimeout(() => {
+        tone(f, 0.18, 'triangle', 0.16)
+        tone(f * 2, 0.14, 'sine', 0.05)
+      }, i * 80)
+    })
+  },
 }

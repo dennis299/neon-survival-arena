@@ -49,14 +49,18 @@ export async function submitScore(entry: {
   }
 }
 
-/** 1-based global rank of a finished run: rows with a strictly better time + 1 */
-export async function fetchRankFor(timeSeconds: number): Promise<number | null> {
+/** 1-based global rank of a finished run: rows with a strictly better time + 1.
+ * Pass a dailyBoardId to rank within that day's daily board instead. */
+export async function fetchRankFor(timeSeconds: number, dailyId?: string): Promise<number | null> {
   if (!supabase) return null
   try {
-    const { count, error } = await supabase
+    let q = supabase
       .from('scores')
       .select('*', { count: 'exact', head: true })
       .gt('time_seconds', Math.max(1, Math.round(timeSeconds)))
+    // daily rows share the table, tagged 'daily:yyyymmdd' in character_id
+    q = dailyId ? q.eq('character_id', dailyId) : q.not('character_id', 'like', 'daily:%')
+    const { count, error } = await q
     if (error || count === null) return null
     return count + 1
   } catch {
@@ -70,6 +74,25 @@ export async function fetchTopScores(limit = 10): Promise<GlobalScore[]> {
     const { data, error } = await supabase
       .from('scores')
       .select('name, time_seconds, kills, level, bosses, character_id, created_at')
+      // daily-challenge rows live in the same table; keep them off the all-time board
+      .not('character_id', 'like', 'daily:%')
+      .order('time_seconds', { ascending: false })
+      .limit(limit)
+    if (error || !data) return []
+    return data
+  } catch {
+    return []
+  }
+}
+
+/** today's daily-challenge board — rows tagged with the given dailyBoardId */
+export async function fetchDailyScores(dailyId: string, limit = 10): Promise<GlobalScore[]> {
+  if (!supabase) return []
+  try {
+    const { data, error } = await supabase
+      .from('scores')
+      .select('name, time_seconds, kills, level, bosses, character_id, created_at')
+      .eq('character_id', dailyId)
       .order('time_seconds', { ascending: false })
       .limit(limit)
     if (error || !data) return []

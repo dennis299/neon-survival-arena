@@ -19,6 +19,7 @@ import {
 } from '../config'
 import { sfx } from '../audio'
 import { haptics } from '../haptics'
+import { rng } from '../rng'
 import { dropCoin, dropGem } from '../entities/gem'
 import { createEnemy } from '../entities/enemy'
 import { fireRadialRing } from '../entities/bullet'
@@ -373,6 +374,7 @@ export function resolveCollisions(state: GameState, dt: number) {
     dropGem(state, e.x, e.y, e.xp)
     if (e.elite) {
       // elites are always worth stopping for
+      state.eliteKills++
       state.hitStop = Math.max(state.hitStop, 0.1)
       addText(state, e.x, e.y - e.radius - 12, 'ELITE DOWN', ELITE_COLORS[e.elite], 16)
       spawnBurst(state, e.x, e.y, ELITE_COLORS[e.elite], 18, 220, 4.5, 0.6, true)
@@ -381,7 +383,7 @@ export function resolveCollisions(state: GameState, dt: number) {
         e.x,
         e.y,
         CHEST.eliteRewardsMin +
-          ((Math.random() * (CHEST.eliteRewardsMax - CHEST.eliteRewardsMin + 1)) | 0),
+          ((rng() * (CHEST.eliteRewardsMax - CHEST.eliteRewardsMin + 1)) | 0),
       )
       for (let i = 0; i < ELITE.coins; i++) dropCoin(state, e.x, e.y, 1)
       if (e.elite === 'splitting') {
@@ -389,13 +391,17 @@ export function resolveCollisions(state: GameState, dt: number) {
         for (let i = 0; i < ELITE.splitCount && state.enemies.length < ENEMY_CAP; i++) {
           const a = (i / ELITE.splitCount) * Math.PI * 2
           state.enemies.push(
-            createEnemy(state, 'bug', e.x + Math.cos(a) * 20, e.y + Math.sin(a) * 20, hp, speed),
+            createEnemy(
+              state, 'bug',
+              e.x + Math.cos(a) * 20, e.y + Math.sin(a) * 20,
+              hp, speed * state.mods.enemySpeedMult,
+            ),
           )
         }
       }
     } else {
-      if (Math.random() < COIN_DROP_CHANCE) dropCoin(state, e.x, e.y, 1)
-      if (Math.random() < PICKUPS.dropChance) dropPickup(state, e.x, e.y)
+      if (rng() < COIN_DROP_CHANCE) dropCoin(state, e.x, e.y, 1)
+      if (rng() < PICKUPS.dropChance) dropPickup(state, e.x, e.y)
     }
   }
   // compact dead enemies

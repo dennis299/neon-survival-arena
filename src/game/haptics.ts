@@ -24,4 +24,6 @@ export const haptics = {
   evolution: () => vibrate([25, 40, 25, 40, 90]),
   bossWarn: () => vibrate([60, 80, 60, 80, 60]),
   bossDie: () => vibrate([40, 60, 40, 60, 120]),
+  achievement: () => vibrate([12, 30, 12]),
+  newRecord: () => vibrate([20, 40, 20, 40, 70]),
 }

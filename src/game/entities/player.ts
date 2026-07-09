@@ -1,14 +1,22 @@
-import { DASH, STATIC_FIELD, basePlayerStats } from '../config'
+import { DASH, STATIC_FIELD, applyPermUpgrades, basePlayerStats } from '../config'
 import { sfx } from '../audio'
 import { haptics } from '../haptics'
 import { spawnBurst } from '../systems/particles'
-import type { CharacterDef, Player } from '../types'
+import type { CharacterDef, DailyModDef, Player, RunMods } from '../types'
 import type { InputState } from '../input'
 import type { GameState } from '../types'
 
-export function createPlayer(character: CharacterDef): Player {
+export function createPlayer(
+  character: CharacterDef,
+  permRanks: Record<string, number>,
+  dailyMod: DailyModDef | null,
+  mods: RunMods,
+): Player {
   const stats = basePlayerStats()
   character.mod(stats)
+  applyPermUpgrades(stats, permRanks)
+  // daily modifier last — it may also write spawn knobs into mods
+  dailyMod?.apply(stats, mods)
   return {
     ...stats,
     x: 0,
@@ -43,6 +51,7 @@ export function updatePlayer(state: GameState, input: InputState, dashRequested:
     p.dashT = DASH.duration
     p.dashCd = DASH.cooldown
     p.iframes = Math.max(p.iframes, DASH.iframes)
+    state.dashes++
     sfx.dash()
     haptics.dash()
     spawnBurst(state, p.x, p.y, '#4dd8ff', 10, 180, 3, 0.3, true)

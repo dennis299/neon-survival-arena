@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import MainMenu from './components/MainMenu'
 import OrientationGate from './components/OrientationGate'
 import GameScreen from './GameScreen'
-import { CHARACTERS } from './game/config'
+import { CHARACTERS, PERM_UPGRADES, dailyKey, permUpgradeCost } from './game/config'
+import { evaluateRunAchievements } from './game/achievements'
 import { setMuted, unlockAudio } from './game/audio'
 import { setHapticsEnabled } from './game/haptics'
 import {
@@ -13,28 +14,11 @@ import {
 } from './game/storage'
 import type { RunStats } from './game/types'
 
-function evaluateAchievements(save: SaveData, stats: RunStats): string[] {
-  const earned: string[] = []
-  const has = (id: string) => save.achievements.includes(id) || earned.includes(id)
-  const award = (id: string, cond: boolean) => {
-    if (cond && !has(id)) earned.push(id)
-  }
-  award('first-blood', stats.kills > 0)
-  award('survive-5', stats.time >= 300)
-  award('survive-10', stats.time >= 600)
-  award('survive-18', stats.time >= 1080)
-  award('boss-1', stats.bossesKilled >= 1)
-  award('boss-3', stats.bossesKilled >= 3)
-  award('level-20', stats.level >= 20)
-  award('kills-1000', save.totalKills + stats.kills >= 1000)
-  award('rich', save.coins + stats.coins >= 1000)
-  return earned
-}
-
 export default function App() {
   const [screen, setScreen] = useState<'menu' | 'game'>('menu')
   const [save, setSave] = useState<SaveData>(loadSave)
   const [runKey, setRunKey] = useState(0)
+  const [daily, setDaily] = useState(false)
   // keep the latest save reachable from game callbacks without re-mounting the game
   const saveRef = useRef(save)
   saveRef.current = save
@@ -58,15 +42,25 @@ export default function App() {
   }, [])
 
   const handleRunEnd = useCallback(
-    (stats: RunStats): string[] => {
+    (stats: RunStats, meta: { daily: boolean; practice: boolean }): string[] => {
       const cur = saveRef.current
-      const character = CHARACTERS.find((c) => c.id === cur.selectedCharacter)?.name ?? '?'
-      const newAch = evaluateAchievements(cur, stats)
+      const character = meta.daily
+        ? 'Daily'
+        : (CHARACTERS.find((c) => c.id === cur.selectedCharacter)?.name ?? '?')
+      const newAch = evaluateRunAchievements(cur, stats, meta.daily)
       let next: SaveData = {
         ...cur,
         coins: cur.coins + stats.coins,
         totalKills: cur.totalKills + stats.kills,
+        totalBosses: cur.totalBosses + stats.bossesKilled,
+        totalElites: cur.totalElites + stats.eliteKills,
+        totalDashes: cur.totalDashes + stats.dashes,
+        totalChests: cur.totalChests + stats.chestsOpened,
         achievements: [...cur.achievements, ...newAch],
+      }
+      // first daily finish of the UTC day is the real attempt
+      if (meta.daily && !meta.practice) {
+        next = { ...next, dailyAttempt: { date: dailyKey(), time: stats.time } }
       }
       next = addLeaderboardEntry(next, {
         time: stats.time,
@@ -77,6 +71,17 @@ export default function App() {
       })
       updateSave(next)
       return newAch
+    },
+    [updateSave],
+  )
+
+  // in-run achievement toasts bank immediately so a crash can't lose them
+  const handleLiveAchievements = useCallback(
+    (ids: string[]) => {
+      const cur = saveRef.current
+      const fresh = ids.filter((id) => !cur.achievements.includes(id))
+      if (fresh.length === 0) return
+      updateSave({ ...cur, achievements: [...cur.achievements, ...fresh] })
     },
     [updateSave],
   )
@@ -102,8 +107,10 @@ export default function App() {
         <OrientationGate />
         <GameScreen
           save={save}
+          daily={daily}
           runKey={runKey}
           onRunEnd={handleRunEnd}
+          onLiveAchievements={handleLiveAchievements}
           onAbandon={handleAbandon}
           onToggleMute={toggleMute}
           onRetry={() => setRunKey((k) => k + 1)}
@@ -118,7 +125,8 @@ export default function App() {
       <OrientationGate />
       <MainMenu
         save={save}
-        onPlay={() => {
+        onPlay={(playDaily) => {
+          setDaily(playDaily)
           setRunKey((k) => k + 1)
           setScreen('game')
         }}
@@ -131,6 +139,23 @@ export default function App() {
             coins: save.coins - def.cost,
             unlockedCharacters: [...save.unlockedCharacters, id],
             selectedCharacter: id,
+          })
+        }}
+        onBuyPermUpgrade={(id) => {
+          const def = PERM_UPGRADES.find((u) => u.id === id)
+          if (!def) return
+          const rank = save.permUpgrades[id] ?? 0
+          const cost = permUpgradeCost(def, rank)
+          if (rank >= def.maxRank || save.coins < cost) return
+          const achievements =
+            rank + 1 >= def.maxRank && !save.achievements.includes('perm-max')
+              ? [...save.achievements, 'perm-max']
+              : save.achievements
+          updateSave({
+            ...save,
+            coins: save.coins - cost,
+            permUpgrades: { ...save.permUpgrades, [id]: rank + 1 },
+            achievements,
           })
         }}
         onToggleMute={toggleMute}

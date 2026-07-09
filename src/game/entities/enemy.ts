@@ -3,6 +3,7 @@
 // at spawn by the spawn system.
 
 import { ELITE, ELITE_COLORS, ENEMY_COLORS, ENEMY_DEFS } from '../config'
+import { rng } from '../rng'
 import { spawnBurst } from '../systems/particles'
 import type { EliteMod, Enemy, EnemyKind, GameState } from '../types'
 
@@ -40,7 +41,7 @@ export function createEnemy(
     burn: 0,
     burnDps: 0,
     hitFlash: 0,
-    t: Math.random() * 10,
+    t: rng() * 10,
     phase: 0,
     angle: 0,
     orbHitT: 0,
@@ -50,7 +51,7 @@ export function createEnemy(
 
 /** Promote a freshly-spawned enemy to an elite with one random modifier. */
 export function makeElite(state: GameState, e: Enemy): Enemy {
-  const mod = ELITE_MODS[(Math.random() * ELITE_MODS.length) | 0]
+  const mod = ELITE_MODS[(rng() * ELITE_MODS.length) | 0]
   e.elite = mod
   e.radius *= ELITE.radiusMult
   e.hp *= ELITE.hpMult
@@ -157,8 +158,8 @@ export function updateEnemies(state: GameState, dt: number) {
         if (e.t > NINJA_BLINK_EVERY && dist > 130) {
           e.t = 0
           spawnBurst(state, e.x, e.y, ENEMY_COLORS.ninja, 8, 90, 3, 0.4, true)
-          const ang = Math.random() * Math.PI * 2
-          const r = 90 + Math.random() * 60
+          const ang = rng() * Math.PI * 2
+          const r = 90 + rng() * 60
           e.x = p.x + Math.cos(ang) * r
           e.y = p.y + Math.sin(ang) * r
           spawnBurst(state, e.x, e.y, ENEMY_COLORS.ninja, 8, 90, 3, 0.4, true)

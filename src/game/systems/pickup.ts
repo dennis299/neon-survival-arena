@@ -5,6 +5,7 @@
 
 import { PICKUPS, PICKUP_DEFS } from '../config'
 import { sfx } from '../audio'
+import { rng } from '../rng'
 import { addText, spawnBurst } from './particles'
 import type { GameState, PickupKind } from '../types'
 
@@ -14,8 +15,8 @@ export function dropPickup(state: GameState, x: number, y: number) {
   let onField = 0
   for (const pk of state.pickups) if (pk.kind !== 'chest') onField++
   if (onField >= PICKUPS.fieldCap) return
-  const kind = ROLLABLE[(Math.random() * ROLLABLE.length) | 0]
-  state.pickups.push({ x, y, kind, t: Math.random() * 10, life: PICKUPS.life, rewards: 0 })
+  const kind = ROLLABLE[(rng() * ROLLABLE.length) | 0]
+  state.pickups.push({ x, y, kind, t: rng() * 10, life: PICKUPS.life, rewards: 0 })
 }
 
 export function dropChest(state: GameState, x: number, y: number, rewards: number) {
@@ -69,6 +70,7 @@ export function updatePickups(state: GameState, dt: number, viewW: number, viewH
         }
         state.flashT = 0.35
         state.shake += 24
+        state.nukesUsed++
         addText(state, p.x, p.y - 24, 'NUKE!', PICKUP_DEFS.nuke.color, 18)
         sfx.pickupNuke()
         break
@@ -84,6 +86,7 @@ export function updatePickups(state: GameState, dt: number, viewW: number, viewH
         // resolved by the loop: pauses the sim and rolls the rewards
         // (+= so two chests touched the same frame both count)
         state.chestPendingRewards += pk.rewards
+        state.chestsOpened++
         spawnBurst(state, pk.x, pk.y, '#ffd23e', 20, 200, 3.5, 0.6, true)
         break
       }

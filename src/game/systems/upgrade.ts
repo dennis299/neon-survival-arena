@@ -5,6 +5,7 @@
 // guaranteed offer until it's taken.
 
 import { EVOLUTIONS, UPGRADES } from '../config'
+import { rng } from '../rng'
 import type { EvolutionDef, GameState, UpgradeChoice, UpgradeDef } from '../types'
 
 function isAvailable(state: GameState, def: UpgradeDef): boolean {
@@ -45,7 +46,7 @@ export function rollChoices(state: GameState): UpgradeChoice[] {
     const candidates = pool.filter((u) => !used.has(u.id))
     let total = 0
     for (const u of candidates) total += weightFor(state, u)
-    let roll = Math.random() * total
+    let roll = rng() * total
     let chosen = candidates[candidates.length - 1]
     for (const u of candidates) {
       roll -= weightFor(state, u)
@@ -107,7 +108,7 @@ export function rollChestRewards(
       out.push({ def: null, level: 0 })
       continue
     }
-    const u = pool[(Math.random() * pool.length) | 0]
+    const u = pool[(rng() * pool.length) | 0]
     taken[u.id] = (taken[u.id] ?? 0) + 1
     out.push({ def: u, level: taken[u.id] })
   }

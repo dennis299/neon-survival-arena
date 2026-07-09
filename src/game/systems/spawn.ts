@@ -4,18 +4,23 @@
 import { DIFFICULTY, ELITE, ENEMY_DEFS } from '../config'
 import { sfx } from '../audio'
 import { haptics } from '../haptics'
+import { rng } from '../rng'
 import { createBoss } from '../entities/boss'
 import { createEnemy, makeElite } from '../entities/enemy'
-import type { EnemyKind, GameState } from '../types'
+import type { EnemyKind, GameState, RunMods } from '../types'
 
 const KINDS = Object.keys(ENEMY_DEFS) as EnemyKind[]
 export const ENEMY_CAP = 260
 
-function spawnInterval(time: number): number {
+function spawnInterval(time: number, mods: RunMods): number {
   const t = Math.min(1, time / DIFFICULTY.rampTime)
   // ease-out so early game ramps quickly enough to stay exciting
   const eased = 1 - Math.pow(1 - t, 1.6)
-  return DIFFICULTY.spawnStart + (DIFFICULTY.spawnFloor - DIFFICULTY.spawnStart) * eased
+  const floor = DIFFICULTY.spawnFloor * mods.spawnFloorMult
+  return Math.max(
+    floor,
+    (DIFFICULTY.spawnStart + (floor - DIFFICULTY.spawnStart) * eased) / mods.spawnRateMult,
+  )
 }
 
 export function difficultyMults(time: number): { hp: number; speed: number } {
@@ -26,15 +31,15 @@ export function difficultyMults(time: number): { hp: number; speed: number } {
   }
 }
 
-function pickKind(time: number): EnemyKind {
+function pickKind(time: number, mods: RunMods): EnemyKind {
   let total = 0
   for (const k of KINDS) {
-    if (time >= ENEMY_DEFS[k].unlockAt) total += ENEMY_DEFS[k].weight
+    if (time >= ENEMY_DEFS[k].unlockAt) total += ENEMY_DEFS[k].weight * (mods.weightMult[k] ?? 1)
   }
-  let roll = Math.random() * total
+  let roll = rng() * total
   for (const k of KINDS) {
     if (time < ENEMY_DEFS[k].unlockAt) continue
-    roll -= ENEMY_DEFS[k].weight
+    roll -= ENEMY_DEFS[k].weight * (mods.weightMult[k] ?? 1)
     if (roll <= 0) return k
   }
   return 'bug'
@@ -49,28 +54,29 @@ function spawnOffscreen(state: GameState, kind: EnemyKind, viewW: number, viewH:
   const halfH = viewH / 2 + margin
   let x: number
   let y: number
-  if (Math.random() < 0.5) {
-    x = p.x + (Math.random() < 0.5 ? -halfW : halfW)
-    y = p.y + (Math.random() * 2 - 1) * halfH
+  if (rng() < 0.5) {
+    x = p.x + (rng() < 0.5 ? -halfW : halfW)
+    y = p.y + (rng() * 2 - 1) * halfH
   } else {
-    x = p.x + (Math.random() * 2 - 1) * halfW
-    y = p.y + (Math.random() < 0.5 ? -halfH : halfH)
+    x = p.x + (rng() * 2 - 1) * halfW
+    y = p.y + (rng() < 0.5 ? -halfH : halfH)
   }
-  const e = createEnemy(state, kind, x, y, hp, speed)
+  const e = createEnemy(state, kind, x, y, hp, speed * state.mods.enemySpeedMult)
   // rare elite promotion once the run has warmed up
-  if (state.time >= ELITE.unlockAt && Math.random() < ELITE.chance) makeElite(state, e)
+  const eliteChance = state.mods.eliteChance ?? ELITE.chance
+  if (state.time >= ELITE.unlockAt && rng() < eliteChance) makeElite(state, e)
   state.enemies.push(e)
 }
 
 export function updateSpawner(state: GameState, dt: number, viewW: number, viewH: number) {
   state.spawnT -= dt
   if (state.spawnT <= 0) {
-    state.spawnT = spawnInterval(state.time)
-    spawnOffscreen(state, pickKind(state.time), viewW, viewH)
+    state.spawnT = spawnInterval(state.time, state.mods)
+    spawnOffscreen(state, pickKind(state.time, state.mods), viewW, viewH)
     // occasional pack spawn, more likely later
     const packChance = (state.time / 60) * DIFFICULTY.packChancePerMin
-    if (Math.random() < packChance) {
-      const kind = pickKind(state.time)
+    if (rng() < packChance) {
+      const kind = pickKind(state.time, state.mods)
       for (let i = 0; i < 6; i++) spawnOffscreen(state, kind, viewW, viewH)
     }
   }

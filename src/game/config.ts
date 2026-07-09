@@ -3,11 +3,14 @@
 
 import type {
   CharacterDef,
+  DailyModDef,
   EliteMod,
   EnemyKind,
   EvolutionDef,
+  PermUpgradeDef,
   PickupKind,
   PlayerStats,
+  RunMods,
   UpgradeDef,
 } from './types'
 
@@ -135,6 +138,7 @@ export function basePlayerStats(): PlayerStats {
     novaLevel: 0,
     shieldOrbs: 0,
     xpMult: 1,
+    coinMult: 1,
     burningGround: false,
     staticField: false,
     bulletHell: false,
@@ -376,6 +380,126 @@ export const CHARACTERS: CharacterDef[] = [
   },
 ]
 
+/** Permanent coin-bought upgrades applied to every run's starting stats.
+ * Cost of the next rank = baseCost * (rank + 1). Head Start is special-cased
+ * by the loop (grants starting XP, not a stat). */
+export const PERM_UPGRADES: PermUpgradeDef[] = [
+  {
+    id: 'hull', name: 'Hull Plating', icon: '🛡️', maxRank: 5, baseCost: 200,
+    desc: '+10 max HP per rank',
+    apply: (s, rank) => { s.maxHp += 10 * rank },
+  },
+  {
+    id: 'damage', name: 'Damage Core', icon: '💠', maxRank: 5, baseCost: 250,
+    desc: '+5% damage per rank',
+    apply: (s, rank) => { s.damage *= 1 + 0.05 * rank },
+  },
+  {
+    id: 'magnet', name: 'Magnet Coil', icon: '🧲', maxRank: 3, baseCost: 150,
+    desc: '+15% gem magnet per rank',
+    apply: (s, rank) => { s.magnet *= 1 + 0.15 * rank },
+  },
+  {
+    id: 'coin', name: 'Coin Doubler', icon: '🪙', maxRank: 3, baseCost: 400,
+    desc: '+20% coin gain per rank',
+    apply: (s, rank) => { s.coinMult += 0.2 * rank },
+  },
+  {
+    id: 'headstart', name: 'Head Start', icon: '🚀', maxRank: 2, baseCost: 500,
+    desc: 'Start each run at +1 level per rank (free picks)',
+    apply: () => {},
+  },
+  {
+    id: 'speed', name: 'Fourth Gear', icon: '👟', maxRank: 3, baseCost: 300,
+    desc: '+4% move speed per rank',
+    apply: (s, rank) => { s.speed *= 1 + 0.04 * rank },
+  },
+]
+
+export function permUpgradeCost(def: PermUpgradeDef, rank: number): number {
+  return def.baseCost * (rank + 1)
+}
+
+export function applyPermUpgrades(stats: PlayerStats, ranks: Record<string, number>) {
+  for (const def of PERM_UPGRADES) {
+    const rank = Math.min(def.maxRank, ranks[def.id] ?? 0)
+    if (rank > 0) def.apply(stats, rank)
+  }
+}
+
+export function defaultRunMods(): RunMods {
+  return {
+    spawnRateMult: 1,
+    spawnFloorMult: 1,
+    weightMult: {},
+    enemySpeedMult: 1,
+    eliteChance: null,
+  }
+}
+
+/** Daily challenge modifiers, indexed by UTC day-of-week (0 = Sunday). */
+export const DAILY_MODS: DailyModDef[] = [
+  {
+    id: 'swarm', name: 'Swarm Day',
+    desc: 'Bugs only — at twice the spawn rate',
+    apply: (_s, m) => {
+      m.spawnRateMult = 2
+      m.weightMult = { tank: 0, sniper: 0, drone: 0, boomer: 0, ninja: 0, shield: 0 }
+    },
+  },
+  {
+    id: 'glass', name: 'Glass Cannon',
+    desc: 'Double damage dealt, half max HP',
+    apply: (s) => { s.damage *= 2; s.maxHp = Math.round(s.maxHp * 0.5) },
+  },
+  {
+    id: 'blitz', name: 'Blitz',
+    desc: 'Enemies move 40% faster, +50% XP',
+    apply: (s, m) => { m.enemySpeedMult = 1.4; s.xpMult += 0.5 },
+  },
+  {
+    id: 'tanks', name: 'Tank Parade',
+    desc: 'Tanks and shield guards spawn 3x as often',
+    apply: (_s, m) => { m.weightMult = { tank: 3, shield: 3 } },
+  },
+  {
+    id: 'fog', name: 'Fog of War',
+    desc: 'Spawn pressure ramps to twice the usual ceiling',
+    apply: (_s, m) => { m.spawnFloorMult = 0.5 },
+  },
+  {
+    id: 'rich', name: 'Rich Rush',
+    desc: 'Triple coin gain',
+    apply: (s) => { s.coinMult *= 3 },
+  },
+  {
+    id: 'elite', name: 'Elite Hour',
+    desc: 'Elite spawn chance jumps to 8%',
+    apply: (_s, m) => { m.eliteChance = 0.08 },
+  },
+]
+
+/** 'YYYY-MM-DD' in UTC — the daily challenge rolls over at midnight UTC */
+export function dailyKey(now = new Date()): string {
+  return now.toISOString().slice(0, 10)
+}
+
+/** deterministic seed for the day: everyone plays the same run */
+export function dailySeed(key = dailyKey()): number {
+  let h = 0
+  for (let i = 0; i < key.length; i++) h = (Math.imul(h, 31) + key.charCodeAt(i)) | 0
+  return h
+}
+
+export function todaysDailyMod(now = new Date()): DailyModDef {
+  return DAILY_MODS[now.getUTCDay()]
+}
+
+/** daily scores share the normal 'scores' table, tagged via character_id */
+export function dailyBoardId(key = dailyKey()): string {
+  return 'daily:' + key.replace(/-/g, '')
+}
+
 export interface AchievementDef {
   id: string
   name: string
@@ -388,9 +512,24 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'survive-5', name: 'Warm-Up', desc: 'Survive 5 minutes', icon: '⏱️' },
   { id: 'survive-10', name: 'Veteran', desc: 'Survive 10 minutes', icon: '🎖️' },
   { id: 'survive-18', name: 'Neon Legend', desc: 'Survive 18 minutes', icon: '👑' },
+  { id: 'survive-25', name: 'Immortal', desc: 'Survive 25 minutes', icon: '♾️' },
   { id: 'boss-1', name: 'Giant Slayer', desc: 'Defeat a boss', icon: '🤖' },
   { id: 'boss-3', name: 'Exterminator', desc: 'Defeat 3 bosses in one run', icon: '💀' },
+  { id: 'boss-10', name: 'Boss Hunter', desc: 'Defeat 10 bosses (lifetime)', icon: '🏆' },
   { id: 'level-20', name: 'Maxed Out', desc: 'Reach level 20 in one run', icon: '📈' },
+  { id: 'level-30', name: 'Ascended', desc: 'Reach level 30 in one run', icon: '🌟' },
   { id: 'kills-1000', name: 'Swarm Breaker', desc: '1,000 total kills (lifetime)', icon: '🐛' },
+  { id: 'kills-10000', name: 'Swarm Ender', desc: '10,000 total kills (lifetime)', icon: '🌊' },
+  { id: 'combo-25', name: 'Rampage', desc: '25 kill streak in one run', icon: '🔥' },
+  { id: 'combo-50', name: 'Unstoppable', desc: '50 kill streak in one run', icon: '⚡' },
+  { id: 'evolution-1', name: 'Evolved', desc: 'Take a weapon evolution', icon: '🧬' },
+  { id: 'evolution-4', name: 'Apex Form', desc: 'All four evolutions in one run', icon: '👾' },
+  { id: 'elite-10', name: 'Elite Slayer', desc: 'Kill 10 elites (lifetime)', icon: '☠️' },
+  { id: 'dash-100', name: 'Blur', desc: 'Dash 100 times (lifetime)', icon: '💨' },
+  { id: 'nuke-1', name: 'Big Red Button', desc: 'Grab a nuke pickup', icon: '☢️' },
+  { id: 'chest-10', name: 'Treasure Hunter', desc: 'Open 10 chests (lifetime)', icon: '🗝️' },
+  { id: 'daily-1', name: 'Clocking In', desc: 'Finish a daily challenge', icon: '📅' },
   { id: 'rich', name: 'Crypto Miner', desc: 'Hold 1,000 coins', icon: '💰' },
+  { id: 'rich-5000', name: 'Crypto Whale', desc: 'Hold 5,000 coins', icon: '🐋' },
+  { id: 'perm-max', name: 'Fully Loaded', desc: 'Max out a permanent upgrade', icon: '🔩' },
 ]

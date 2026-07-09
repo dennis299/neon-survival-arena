@@ -205,6 +205,8 @@ export interface PlayerStats {
   shieldOrbs: number
   /** XP multiplier (Neural Link upgrade), 1 = none */
   xpMult: number
+  /** coin gain multiplier (Coin Doubler perm upgrade / Rich Rush daily), 1 = none */
+  coinMult: number
   // --- weapon evolution flags ---
   /** Meteor Storm: explosions leave burning ground */
   burningGround: boolean
@@ -292,6 +294,41 @@ export interface CharacterDef {
   mod: (s: PlayerStats) => void
 }
 
+/** Run-wide modifier knobs set by the daily challenge; all neutral by default
+ * (see defaultRunMods in config). Read by the spawn director. */
+export interface RunMods {
+  /** divides the spawn interval — 2 = twice the spawn pressure */
+  spawnRateMult: number
+  /** scales the spawn-interval floor — 0.5 = late-game pressure hits harder */
+  spawnFloorMult: number
+  /** per-kind spawn weight multiplier; 0 removes the kind entirely */
+  weightMult: Partial<Record<EnemyKind, number>>
+  /** enemy move-speed multiplier applied at spawn */
+  enemySpeedMult: number
+  /** overrides ELITE.chance when set */
+  eliteChance: number | null
+}
+
+/** One daily-challenge modifier; rotates by UTC day-of-week. */
+export interface DailyModDef {
+  id: string
+  name: string
+  desc: string
+  apply: (s: PlayerStats, mods: RunMods) => void
+}
+
+/** Permanent (coin-bought, persists across runs) player upgrade.
+ * Cost of the next rank = baseCost * (rank + 1). */
+export interface PermUpgradeDef {
+  id: string
+  name: string
+  icon: string
+  desc: string
+  maxRank: number
+  baseCost: number
+  apply: (s: PlayerStats, rank: number) => void
+}
+
 export interface RunStats {
   time: number
   kills: number
@@ -300,6 +337,12 @@ export interface RunStats {
   bossesKilled: number
   damageDealt: number
   maxCombo: number
+  /** weapon evolutions taken this run */
+  evolutions: number
+  eliteKills: number
+  dashes: number
+  nukesUsed: number
+  chestsOpened: number
   /** what landed the killing blow, e.g. "GIANT ROBOT" */
   killedBy: string
   upgrades: { name: string; level: number; icon: string; color: string }[]
@@ -323,6 +366,11 @@ export interface HudSnapshot {
   envName: string
   combo: number
   comboMult: number
+  maxCombo: number
+  /** weapon evolutions taken so far — live achievement checks */
+  evolutions: number
+  /** the personal best this run is chasing (0 = none yet) */
+  bestTime: number
   /** 0..1 how hairy things are right now — drives the music's intensity */
   danger: number
 }
@@ -396,4 +444,15 @@ export interface GameState {
   chestPendingRewards: number
   /** seconds of full-screen white flash remaining (nuke pickup) */
   flashT: number
+  /** daily-challenge modifier knobs; neutral for normal runs */
+  mods: RunMods
+  // --- per-run achievement counters ---
+  eliteKills: number
+  dashes: number
+  nukesUsed: number
+  chestsOpened: number
+  /** run time has passed the personal best (fires the banner/sting once) */
+  pbBeaten: boolean
+  /** seconds remaining on the "NEW RECORD" banner */
+  pbBannerT: number
 }
