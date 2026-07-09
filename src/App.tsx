@@ -101,6 +101,11 @@ export default function App() {
     updateSave(next)
   }, [updateSave])
 
+  const handleTutorialSeen = useCallback(() => {
+    const cur = saveRef.current
+    if (!cur.seenTutorial) updateSave({ ...cur, seenTutorial: true })
+  }, [updateSave])
+
   if (screen === 'game') {
     return (
       <>
@@ -113,6 +118,7 @@ export default function App() {
           onLiveAchievements={handleLiveAchievements}
           onAbandon={handleAbandon}
           onToggleMute={toggleMute}
+          onTutorialSeen={handleTutorialSeen}
           onRetry={() => setRunKey((k) => k + 1)}
           onMenu={() => setScreen('menu')}
         />

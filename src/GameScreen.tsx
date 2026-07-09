@@ -16,6 +16,7 @@ import HUD from './components/HUD'
 import UpgradeCards from './components/UpgradeCards'
 import ChestOverlay from './components/ChestOverlay'
 import PauseMenu from './components/PauseMenu'
+import TutorialHints from './components/TutorialHints'
 import GameOver, { type SubmitStatus } from './components/GameOver'
 
 const EMPTY_HUD: HudSnapshot = {
@@ -52,6 +53,7 @@ export default function GameScreen({
   onLiveAchievements,
   onAbandon,
   onToggleMute,
+  onTutorialSeen,
   runKey,
   onRetry,
   onMenu,
@@ -65,6 +67,8 @@ export default function GameScreen({
   onLiveAchievements: (ids: string[]) => void
   onAbandon: (coins: number, kills: number) => void
   onToggleMute: () => void
+  /** first-run hints dismissed — never show them again */
+  onTutorialSeen: () => void
   runKey: number
   onRetry: () => void
   onMenu: () => void
@@ -82,6 +86,7 @@ export default function GameScreen({
   const [submitStatus, setSubmitStatus] = useState<SubmitStatus>('idle')
   const [globalRank, setGlobalRank] = useState<number | null>(null)
   const [toasts, setToasts] = useState<{ key: number; id: string }[]>([])
+  const [showHints, setShowHints] = useState(!save.seenTutorial)
   const bankedRef = useRef(false)
   // live achievement tracking: what's already earned (save + this run) and
   // the save totals frozen at run start for lifetime-threshold checks
@@ -223,6 +228,14 @@ export default function GameScreen({
           setPaused(true)
         }}
       />
+      {showHints && !gameOver && (
+        <TutorialHints
+          onDismiss={() => {
+            setShowHints(false)
+            onTutorialSeen()
+          }}
+        />
+      )}
       {toasts.length > 0 && !gameOver && (
         <div className="ach-toast-stack">
           {toasts.map((t) => {

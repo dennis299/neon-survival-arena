@@ -26,6 +26,8 @@ export interface SaveData {
   permUpgrades: Record<string, number>
   /** first daily-challenge finish of the UTC day; replays are practice */
   dailyAttempt: { date: string; time: number } | null
+  /** first-run control hints shown and dismissed */
+  seenTutorial: boolean
   settings: {
     muted: boolean
     screenShake: number
@@ -56,6 +58,7 @@ function defaults(): SaveData {
     playerName: randomName(),
     permUpgrades: {},
     dailyAttempt: null,
+    seenTutorial: false,
     settings: { muted: false, screenShake: 1, haptics: true, reduceEffects: false },
   }
 }

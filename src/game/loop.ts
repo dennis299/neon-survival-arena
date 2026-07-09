@@ -125,6 +125,8 @@ export function createGame(canvas: HTMLCanvasElement, opts: GameOptions): GameCo
   let last = performance.now()
   let hudT = 0
   let fps = 60
+  /** seconds of sustained sub-38fps; trips the low-effects fallback at 4s */
+  let lowFpsT = 0
   let levelUpPending = false
   let chestOpen = false
   /** rolled-but-unclaimed chest contents; null entries = coin fallback */
@@ -291,6 +293,16 @@ export function createGame(canvas: HTMLCanvasElement, opts: GameOptions): GameCo
     const rawDt = (now - last) / 1000
     last = now
     if (rawDt > 0) fps = fps * 0.95 + (1 / rawDt) * 0.05
+
+    // struggling device: drop to low-effects for the rest of the run
+    // (one-way — flapping back and forth would be more distracting than help)
+    if (!state.lowEffects && state.running && !state.paused) {
+      lowFpsT = fps < 38 ? lowFpsT + rawDt : 0
+      if (lowFpsT > 4) {
+        state.lowEffects = true
+        resetAmbient(state, ENVIRONMENTS[state.envIndex].ambient, true)
+      }
+    }
 
     if (input.consumePause() && !levelUpPending && !chestOpen && !state.over && !state.dying) {
       state.paused = !state.paused
