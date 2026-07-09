@@ -1,4 +1,4 @@
-import { DASH, basePlayerStats } from '../config'
+import { DASH, STATIC_FIELD, basePlayerStats } from '../config'
 import { sfx } from '../audio'
 import { haptics } from '../haptics'
 import { spawnBurst } from '../systems/particles'
@@ -25,6 +25,9 @@ export function createPlayer(character: CharacterDef): Player {
     dashCd: 0,
     dashDirX: 0,
     dashDirY: 0,
+    overdriveT: 0,
+    staticT: 0,
+    triggerStatic: false,
   }
 }
 
@@ -74,6 +77,17 @@ export function updatePlayer(state: GameState, input: InputState, dashRequested:
     if (p.novaT <= 0) {
       p.novaT = Math.max(1.5, 4.5 - p.novaLevel * 0.5)
       p.triggerNova = true
+    }
+  }
+
+  p.overdriveT = Math.max(0, p.overdriveT - dt)
+
+  // Static Field evolution: periodic arc storm, resolved by the collision pass
+  if (p.staticField) {
+    p.staticT -= dt
+    if (p.staticT <= 0) {
+      p.staticT = STATIC_FIELD.interval
+      p.triggerStatic = true
     }
   }
 }

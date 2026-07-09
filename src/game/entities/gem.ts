@@ -85,7 +85,8 @@ export function updateGems(state: GameState, dt: number) {
         sfx.coin()
         spawnBurst(state, g.x, g.y, PALETTE.coin, 5, 90, 2.5, 0.35, true)
       } else {
-        state.xp += Math.round(g.value * mult)
+        // Neural Link stacks with the streak multiplier
+        state.xp += Math.round(g.value * mult * p.xpMult)
         sfx.gem()
         spawnBurst(state, g.x, g.y, PALETTE.xp, 4, 80, 2.5, 0.3, true)
       }

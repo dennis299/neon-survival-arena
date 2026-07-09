@@ -1,7 +1,15 @@
 // All tuning lives here: palette, enemy/boss stats, difficulty curve,
 // upgrade pool, characters. Balance changes should not require touching systems.
 
-import type { CharacterDef, EnemyKind, PlayerStats, UpgradeDef } from './types'
+import type {
+  CharacterDef,
+  EliteMod,
+  EnemyKind,
+  EvolutionDef,
+  PickupKind,
+  PlayerStats,
+  UpgradeDef,
+} from './types'
 
 export const PALETTE = {
   bg: '#07070f',
@@ -125,6 +133,12 @@ export function basePlayerStats(): PlayerStats {
     iceLevel: 0,
     drones: 0,
     novaLevel: 0,
+    shieldOrbs: 0,
+    xpMult: 1,
+    burningGround: false,
+    staticField: false,
+    bulletHell: false,
+    orbitalArray: false,
   }
 }
 
@@ -209,7 +223,135 @@ export const UPGRADES: UpgradeDef[] = [
     color: '#ff5db1', desc: 'Emits a damaging shockwave every 4.5s (faster per level)',
     apply: (s) => { s.novaLevel += 1 },
   },
+  {
+    id: 'shield', name: 'Orbiting Shield', icon: '🔮', maxLevel: 3, minPlayerLevel: 4,
+    color: '#7c9bff', desc: 'Orbiting energy orb that batters enemies on contact',
+    apply: (s) => { s.shieldOrbs += 1 },
+  },
+  {
+    id: 'xpgain', name: 'Neural Link', icon: '🧠', maxLevel: 3, minPlayerLevel: 2,
+    color: '#38ffb0', desc: '+20% XP from gems',
+    apply: (s) => { s.xpMult += 0.2 },
+  },
 ]
+
+/** Weapon evolutions: maxing both prerequisite lines guarantees the offer on
+ * the next level-up. Each can be owned once. */
+export const EVOLUTIONS: EvolutionDef[] = [
+  {
+    id: 'meteor', name: 'Meteor Storm', icon: '☄️', color: '#ff8a3d',
+    requires: ['fire', 'explosive'],
+    desc: 'Explosions leave burning ground that roasts everything standing in it',
+    apply: (s) => { s.burningGround = true },
+  },
+  {
+    id: 'staticfield', name: 'Static Field', icon: '🌀', color: '#e6d0ff',
+    requires: ['ice', 'chain'],
+    desc: 'Every 2.5s an automatic arc storm zaps and slows up to 6 nearby enemies',
+    apply: (s) => { s.staticField = true },
+  },
+  {
+    id: 'bullethell', name: 'Bullet Hell', icon: '🎇', color: '#ffd23e',
+    requires: ['triple', 'ricochet'],
+    desc: '+2 bullets per shot and ricochets bounce endlessly',
+    apply: (s) => { s.bulletCount += 2; s.bulletHell = true },
+  },
+  {
+    id: 'orbital', name: 'Orbital Array', icon: '🛰️', color: '#64ffda',
+    requires: ['drone', 'nova'],
+    desc: 'Drones fire twice as fast and every nova launches a radial bullet ring',
+    apply: (s) => { s.orbitalArray = true },
+  },
+]
+
+export const STATIC_FIELD = {
+  interval: 2.5,
+  radius: 240,
+  targets: 6,
+  /** fraction of player damage per zap */
+  damageMult: 0.8,
+  /** seconds of slow applied */
+  slow: 1.6,
+} as const
+
+export const BURN_PATCH = {
+  life: 3,
+  /** patch radius as a fraction of the explosion radius */
+  radiusMult: 0.8,
+  /** damage per second as a fraction of player damage */
+  dpsMult: 0.6,
+  /** max simultaneous patches (perf guard) */
+  cap: 24,
+} as const
+
+/** Bullet Hell never decrements ricochet — hard bounce cap instead */
+export const MAX_RICOCHET_BOUNCES = 6
+
+export const SHIELD_ORB = {
+  orbit: 64,
+  radius: 9,
+  /** radians per second the orb ring spins */
+  spin: 1.6,
+  damageMult: 1.2,
+  /** per-enemy seconds between orb hits */
+  cooldown: 0.5,
+  knockback: 46,
+} as const
+
+export const ELITE = {
+  /** ~1-in-40 spawns after unlockAt seconds */
+  chance: 0.025,
+  unlockAt: 90,
+  radiusMult: 1.6,
+  hpMult: 6,
+  damageMult: 1.5,
+  xpMult: 1.5,
+  swiftSpeedMult: 1.6,
+  /** fraction of maxHp healed per second (regenerating) */
+  regenFrac: 0.04,
+  splitCount: 4,
+  coins: 3,
+} as const
+
+export const ELITE_COLORS: Record<EliteMod, string> = {
+  swift: '#4dd8ff',
+  regenerating: '#38ffb0',
+  splitting: '#ff5db1',
+  vampiric: '#ff3d6e',
+}
+
+export const PICKUPS = {
+  /** drop chance per normal (non-elite) kill */
+  dropChance: 0.015,
+  /** max non-chest pickups on the field */
+  fieldCap: 3,
+  life: 12,
+  /** fade out over the last seconds of life */
+  fadeTime: 3,
+  radius: 18,
+  /** health: fraction of maxHp restored */
+  healFrac: 0.3,
+  nukeDamage: 200,
+  /** magnet: velocity slammed onto every gem/coin */
+  magnetSpeed: 1500,
+  overdriveTime: 10,
+  overdriveMult: 2,
+} as const
+
+export const PICKUP_DEFS: Record<Exclude<PickupKind, 'chest'>, { color: string; glyph: string }> = {
+  health: { color: '#38ffb0', glyph: '✚' },
+  magnet: { color: '#ffd23e', glyph: '∩' },
+  nuke: { color: '#ff3d6e', glyph: '☠' },
+  overdrive: { color: '#4dd8ff', glyph: '⚡' },
+}
+
+export const CHEST = {
+  eliteRewardsMin: 1,
+  eliteRewardsMax: 2,
+  bossRewards: 3,
+  /** payout per reward when every relevant upgrade is maxed */
+  coinFallback: 25,
+} as const
 
 export const CHARACTERS: CharacterDef[] = [
   {

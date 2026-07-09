@@ -2,9 +2,11 @@
 // Stats come from ENEMY_DEFS; time-based difficulty multipliers are applied
 // at spawn by the spawn system.
 
-import { ENEMY_COLORS, ENEMY_DEFS } from '../config'
+import { ELITE, ELITE_COLORS, ENEMY_COLORS, ENEMY_DEFS } from '../config'
 import { spawnBurst } from '../systems/particles'
-import type { Enemy, EnemyKind, GameState } from '../types'
+import type { EliteMod, Enemy, EnemyKind, GameState } from '../types'
+
+const ELITE_MODS: EliteMod[] = ['swift', 'regenerating', 'splitting', 'vampiric']
 
 const SNIPER_RANGE = 300
 const SNIPER_COOLDOWN = 2.4
@@ -41,8 +43,23 @@ export function createEnemy(
     t: Math.random() * 10,
     phase: 0,
     angle: 0,
+    orbHitT: 0,
     dead: false,
   }
+}
+
+/** Promote a freshly-spawned enemy to an elite with one random modifier. */
+export function makeElite(state: GameState, e: Enemy): Enemy {
+  const mod = ELITE_MODS[(Math.random() * ELITE_MODS.length) | 0]
+  e.elite = mod
+  e.radius *= ELITE.radiusMult
+  e.hp *= ELITE.hpMult
+  e.maxHp *= ELITE.hpMult
+  e.damage *= ELITE.damageMult
+  e.xp = Math.round(e.xp * ELITE.xpMult)
+  if (mod === 'swift') e.speed *= ELITE.swiftSpeedMult
+  spawnBurst(state, e.x, e.y, ELITE_COLORS[mod], 12, 160, 3.5, 0.5, true)
+  return e
 }
 
 export function updateEnemies(state: GameState, dt: number) {
@@ -53,6 +70,10 @@ export function updateEnemies(state: GameState, dt: number) {
 
     // status effects
     e.hitFlash = Math.max(0, e.hitFlash - dt)
+    if (e.orbHitT > 0) e.orbHitT -= dt
+    if (e.elite === 'regenerating' && e.hp > 0 && e.hp < e.maxHp) {
+      e.hp = Math.min(e.maxHp, e.hp + e.maxHp * ELITE.regenFrac * dt)
+    }
     if (e.burn > 0) {
       e.burn -= dt
       e.hp -= e.burnDps * dt

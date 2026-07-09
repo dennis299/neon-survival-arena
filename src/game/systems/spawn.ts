@@ -1,15 +1,15 @@
 // Spawn director: continuous pressure that ramps with elapsed time, plus the
 // 3-minute boss schedule. Enemies always spawn just outside the viewport.
 
-import { DIFFICULTY, ENEMY_DEFS } from '../config'
+import { DIFFICULTY, ELITE, ENEMY_DEFS } from '../config'
 import { sfx } from '../audio'
 import { haptics } from '../haptics'
 import { createBoss } from '../entities/boss'
-import { createEnemy } from '../entities/enemy'
+import { createEnemy, makeElite } from '../entities/enemy'
 import type { EnemyKind, GameState } from '../types'
 
 const KINDS = Object.keys(ENEMY_DEFS) as EnemyKind[]
-const ENEMY_CAP = 260
+export const ENEMY_CAP = 260
 
 function spawnInterval(time: number): number {
   const t = Math.min(1, time / DIFFICULTY.rampTime)
@@ -56,7 +56,10 @@ function spawnOffscreen(state: GameState, kind: EnemyKind, viewW: number, viewH:
     x = p.x + (Math.random() * 2 - 1) * halfW
     y = p.y + (Math.random() < 0.5 ? -halfH : halfH)
   }
-  state.enemies.push(createEnemy(state, kind, x, y, hp, speed))
+  const e = createEnemy(state, kind, x, y, hp, speed)
+  // rare elite promotion once the run has warmed up
+  if (state.time >= ELITE.unlockAt && Math.random() < ELITE.chance) makeElite(state, e)
+  state.enemies.push(e)
 }
 
 export function updateSpawner(state: GameState, dt: number, viewW: number, viewH: number) {

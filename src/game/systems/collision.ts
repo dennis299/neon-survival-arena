@@ -3,10 +3,27 @@
 // kill sweep with drops. This is the hot path — everything is O(n) with
 // small constant lookups.
 
-import { COMBO, ENEMY_COLORS, PALETTE, comboMultiplier } from '../config'
+import {
+  BURN_PATCH,
+  CHEST,
+  COMBO,
+  ELITE,
+  ELITE_COLORS,
+  ENEMY_COLORS,
+  MAX_RICOCHET_BOUNCES,
+  PALETTE,
+  PICKUPS,
+  SHIELD_ORB,
+  STATIC_FIELD,
+  comboMultiplier,
+} from '../config'
 import { sfx } from '../audio'
 import { haptics } from '../haptics'
 import { dropCoin, dropGem } from '../entities/gem'
+import { createEnemy } from '../entities/enemy'
+import { fireRadialRing } from '../entities/bullet'
+import { ENEMY_CAP, difficultyMults } from './spawn'
+import { dropChest, dropPickup } from './pickup'
 import { addText, spawnBurst, spawnExplosionFx } from './particles'
 import type { Boss, Bullet, Enemy, EnemyKind, GameState } from '../types'
 
@@ -131,6 +148,16 @@ export function explode(
 ) {
   sfx.explosion()
   spawnExplosionFx(state, x, y, radius)
+  // Meteor Storm evolution: every explosion scorches the ground
+  if (state.player.burningGround && state.burnPatches.length < BURN_PATCH.cap) {
+    state.burnPatches.push({
+      x,
+      y,
+      radius: radius * BURN_PATCH.radiusMult,
+      life: BURN_PATCH.life,
+      maxLife: BURN_PATCH.life,
+    })
+  }
   for (const e of nearby(grid, x, y, radius, scratch)) {
     if (e.dead) continue
     const d = Math.hypot(e.x - x, e.y - y)
@@ -149,7 +176,7 @@ export function explode(
   }
 }
 
-function retargetRicochet(bullet: Bullet, grid: Grid, scratch: Enemy[]): boolean {
+function retargetRicochet(bullet: Bullet, grid: Grid, scratch: Enemy[], infinite: boolean): boolean {
   let best: Enemy | null = null
   let bestD = 260 * 260
   for (const e of nearby(grid, bullet.x, bullet.y, 260, scratch)) {
@@ -166,7 +193,9 @@ function retargetRicochet(bullet: Bullet, grid: Grid, scratch: Enemy[]): boolean
   bullet.vx = Math.cos(ang) * speed
   bullet.vy = Math.sin(ang) * speed
   bullet.life = Math.max(bullet.life, 0.8)
-  bullet.ricochet--
+  bullet.bounces++
+  // Bullet Hell evolution: bounces are free, only the hard cap stops them
+  if (!infinite) bullet.ricochet--
   return true
 }
 
@@ -183,7 +212,7 @@ function hitBoss(state: GameState, bullet: Bullet, boss: Boss): boolean {
   return true
 }
 
-export function resolveCollisions(state: GameState) {
+export function resolveCollisions(state: GameState, dt: number) {
   const grid = buildGrid(state.enemies)
   const scratch: Enemy[] = []
   const p = state.player
@@ -198,6 +227,75 @@ export function resolveCollisions(state: GameState) {
     // extra visual pop for the nova
     for (let i = 0; i < 3; i++) {
       spawnBurst(state, p.x, p.y, '#ff5db1', 12, radius * 1.5, 5, 0.6, true)
+    }
+    // Orbital Array evolution: nova also launches a radial bullet ring
+    if (p.orbitalArray) fireRadialRing(state)
+  }
+
+  // --- Static Field evolution: arc storm zaps + slows nearby enemies ---
+  if (p.triggerStatic) {
+    p.triggerStatic = false
+    let zapped = 0
+    for (const e of nearby(grid, p.x, p.y, STATIC_FIELD.radius, scratch)) {
+      if (e.dead || e.hp <= 0) continue
+      if ((e.x - p.x) ** 2 + (e.y - p.y) ** 2 > STATIC_FIELD.radius ** 2) continue
+      damageEnemy(state, e, p.damage * STATIC_FIELD.damageMult, p.x, p.y)
+      e.slow = Math.max(e.slow, STATIC_FIELD.slow)
+      // arc visual: sparks along the player→target line
+      const steps = 5
+      for (let s = 0; s <= steps; s++) {
+        const lx = p.x + ((e.x - p.x) * s) / steps
+        const ly = p.y + ((e.y - p.y) * s) / steps
+        spawnBurst(state, lx, ly, PALETTE.lightning, 2, 40, 2, 0.2, true)
+      }
+      if (++zapped >= STATIC_FIELD.targets) break
+    }
+    if (zapped > 0) sfx.staticZap()
+  }
+
+  // --- orbiting shield orbs: melee damage + knockback with per-enemy cooldown ---
+  if (p.shieldOrbs > 0) {
+    for (let i = 0; i < p.shieldOrbs; i++) {
+      const a = state.time * SHIELD_ORB.spin + (i / p.shieldOrbs) * Math.PI * 2
+      const ox = p.x + Math.cos(a) * SHIELD_ORB.orbit
+      const oy = p.y + Math.sin(a) * SHIELD_ORB.orbit
+      for (const e of nearby(grid, ox, oy, SHIELD_ORB.radius + 24, scratch)) {
+        if (e.dead || e.hp <= 0 || e.orbHitT > 0) continue
+        const r = e.radius + SHIELD_ORB.radius
+        if ((e.x - ox) ** 2 + (e.y - oy) ** 2 > r * r) continue
+        e.orbHitT = SHIELD_ORB.cooldown
+        damageEnemy(state, e, p.damage * SHIELD_ORB.damageMult, ox, oy)
+        // shove away from the player
+        const d = Math.hypot(e.x - p.x, e.y - p.y) || 1
+        e.x += ((e.x - p.x) / d) * SHIELD_ORB.knockback
+        e.y += ((e.y - p.y) / d) * SHIELD_ORB.knockback
+        spawnBurst(state, ox, oy, '#7c9bff', 4, 110, 2.5, 0.25, true)
+      }
+    }
+  }
+
+  // --- burning ground (Meteor Storm) ---
+  {
+    const patches = state.burnPatches
+    for (let i = patches.length - 1; i >= 0; i--) {
+      const bp = patches[i]
+      bp.life -= dt
+      if (bp.life <= 0) {
+        patches[i] = patches[patches.length - 1]
+        patches.pop()
+        continue
+      }
+      const dps = p.damage * BURN_PATCH.dpsMult
+      for (const e of nearby(grid, bp.x, bp.y, bp.radius, scratch)) {
+        if (e.dead || e.hp <= 0) continue
+        const r = bp.radius + e.radius
+        if ((e.x - bp.x) ** 2 + (e.y - bp.y) ** 2 > r * r) continue
+        e.hp -= dps * dt
+        state.damageDealt += dps * dt
+      }
+      if (Math.random() < dt * 8) {
+        spawnBurst(state, bp.x + (Math.random() - 0.5) * bp.radius, bp.y + (Math.random() - 0.5) * bp.radius, PALETTE.fire, 1, 30, 2.5, 0.4, true)
+      }
     }
   }
 
@@ -228,7 +326,11 @@ export function resolveCollisions(state: GameState) {
 
       if (b.pierce > 0) {
         b.pierce--
-      } else if (b.ricochet > 0 && retargetRicochet(b, grid, scratch)) {
+      } else if (
+        b.ricochet > 0 &&
+        b.bounces < MAX_RICOCHET_BOUNCES &&
+        retargetRicochet(b, grid, scratch, p.bulletHell)
+      ) {
         // bounced — keeps flying
       } else {
         consumed = true
@@ -269,7 +371,32 @@ export function resolveCollisions(state: GameState) {
     }
     spawnBurst(state, e.x, e.y, ENEMY_COLORS[e.kind], 10, 150, 3.5, 0.45, true)
     dropGem(state, e.x, e.y, e.xp)
-    if (Math.random() < COIN_DROP_CHANCE) dropCoin(state, e.x, e.y, 1)
+    if (e.elite) {
+      // elites are always worth stopping for
+      state.hitStop = Math.max(state.hitStop, 0.1)
+      addText(state, e.x, e.y - e.radius - 12, 'ELITE DOWN', ELITE_COLORS[e.elite], 16)
+      spawnBurst(state, e.x, e.y, ELITE_COLORS[e.elite], 18, 220, 4.5, 0.6, true)
+      dropChest(
+        state,
+        e.x,
+        e.y,
+        CHEST.eliteRewardsMin +
+          ((Math.random() * (CHEST.eliteRewardsMax - CHEST.eliteRewardsMin + 1)) | 0),
+      )
+      for (let i = 0; i < ELITE.coins; i++) dropCoin(state, e.x, e.y, 1)
+      if (e.elite === 'splitting') {
+        const { hp, speed } = difficultyMults(state.time)
+        for (let i = 0; i < ELITE.splitCount && state.enemies.length < ENEMY_CAP; i++) {
+          const a = (i / ELITE.splitCount) * Math.PI * 2
+          state.enemies.push(
+            createEnemy(state, 'bug', e.x + Math.cos(a) * 20, e.y + Math.sin(a) * 20, hp, speed),
+          )
+        }
+      }
+    } else {
+      if (Math.random() < COIN_DROP_CHANCE) dropCoin(state, e.x, e.y, 1)
+      if (Math.random() < PICKUPS.dropChance) dropPickup(state, e.x, e.y)
+    }
   }
   // compact dead enemies
   const alive: Enemy[] = []
@@ -292,6 +419,7 @@ export function resolveCollisions(state: GameState) {
     spawnBurst(state, boss.x, boss.y, '#ff5db1', 40, 260, 5, 0.8, true)
     for (let i = 0; i < 12; i++) dropGem(state, boss.x, boss.y, 5)
     for (let i = 0; i < 8; i++) dropCoin(state, boss.x, boss.y, 5)
+    dropChest(state, boss.x, boss.y, CHEST.bossRewards)
   }
 
   // --- enemy separation (anti-stacking) ---
@@ -316,7 +444,17 @@ export function resolveCollisions(state: GameState) {
       if (e.dead) continue
       const r = e.radius + 12
       if ((e.x - p.x) ** 2 + (e.y - p.y) ** 2 < r * r) {
-        hurtPlayer(state, e.damage, KILLER_NAMES[e.kind])
+        hurtPlayer(
+          state,
+          e.damage,
+          e.elite ? `AN ELITE ${KILLER_NAMES[e.kind].replace(/^AN? /, '')}` : KILLER_NAMES[e.kind],
+        )
+        // vampiric elites heal to full off contact damage
+        if (e.elite === 'vampiric' && e.hp < e.maxHp) {
+          e.hp = e.maxHp
+          addText(state, e.x, e.y - e.radius - 6, 'DRAINED', ELITE_COLORS.vampiric, 12)
+          spawnBurst(state, e.x, e.y, ELITE_COLORS.vampiric, 8, 120, 3, 0.4, true)
+        }
         break
       }
     }

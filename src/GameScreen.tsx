@@ -8,10 +8,11 @@ import { startMusic, type MusicHandle } from './game/music'
 import { setHapticsEnabled } from './game/haptics'
 import { acquireWakeLock, releaseWakeLock, watchWakeLockVisibility } from './game/wakelock'
 import { fetchRankFor, isGlobalLeaderboardEnabled, submitScore } from './game/leaderboard'
-import type { HudSnapshot, RunStats, UpgradeChoice } from './game/types'
+import type { ChestReward, HudSnapshot, RunStats, UpgradeChoice } from './game/types'
 import type { SaveData } from './game/storage'
 import HUD from './components/HUD'
 import UpgradeCards from './components/UpgradeCards'
+import ChestOverlay from './components/ChestOverlay'
 import PauseMenu from './components/PauseMenu'
 import GameOver, { type SubmitStatus } from './components/GameOver'
 
@@ -62,6 +63,7 @@ export default function GameScreen({
   const lastEnvIdRef = useRef('outskirts')
   const [hud, setHud] = useState<HudSnapshot>(EMPTY_HUD)
   const [choices, setChoices] = useState<UpgradeChoice[] | null>(null)
+  const [chest, setChest] = useState<ChestReward[] | null>(null)
   const [paused, setPaused] = useState(false)
   const [gameOver, setGameOver] = useState<RunStats | null>(null)
   const [newAchievements, setNewAchievements] = useState<string[]>([])
@@ -82,6 +84,7 @@ export default function GameScreen({
     bankedRef.current = false
     setHud(EMPTY_HUD)
     setChoices(null)
+    setChest(null)
     setPaused(false)
     setGameOver(null)
     setGlobalRank(null)
@@ -107,6 +110,7 @@ export default function GameScreen({
           }
         },
         onLevelUp: setChoices,
+        onChest: setChest,
         onGameOver: (stats) => {
           bankedRef.current = true
           setNewAchievements(onRunEnd(stats))
@@ -144,10 +148,10 @@ export default function GameScreen({
   useEffect(() => {
     const id = setInterval(() => {
       const c = controlsRef.current
-      if (c && !choices && !gameOver) setPaused(c.isPaused())
+      if (c && !choices && !chest && !gameOver) setPaused(c.isPaused())
     }, 150)
     return () => clearInterval(id)
-  }, [choices, gameOver])
+  }, [choices, chest, gameOver])
 
   return (
     <div className="game-screen">
@@ -168,7 +172,16 @@ export default function GameScreen({
           }}
         />
       )}
-      {paused && !choices && !gameOver && (
+      {chest && !choices && !gameOver && (
+        <ChestOverlay
+          rewards={chest}
+          onClaim={() => {
+            controlsRef.current?.claimChest()
+            setChest(null)
+          }}
+        />
+      )}
+      {paused && !choices && !chest && !gameOver && (
         <PauseMenu
           muted={save.settings.muted}
           onResume={() => {

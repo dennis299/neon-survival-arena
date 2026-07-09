@@ -3,7 +3,7 @@
 // for hundreds of entities), dark grid arena, camera locked to the player
 // with decaying screen shake.
 
-import { DASH, ENEMY_COLORS, PALETTE } from './config'
+import { DASH, ELITE_COLORS, ENEMY_COLORS, PALETTE, PICKUPS, PICKUP_DEFS, SHIELD_ORB } from './config'
 import { ENVIRONMENTS } from './environments'
 import type { Boss, Enemy, GameState } from './types'
 import { DASH_BTN_OFFSET, DASH_BTN_RADIUS, type InputState } from './input'
@@ -68,6 +68,17 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, bgColor: string) {
   const flash = e.hitFlash > 0
   const c = flash ? '#ffffff' : color
   drawGlow(ctx, e.x, e.y, e.radius * 2.4, color, 0.5)
+  // elite aura: bigger glow + pulsing modifier-colored ring
+  if (e.elite) {
+    const ec = ELITE_COLORS[e.elite]
+    drawGlow(ctx, e.x, e.y, e.radius * 3.2, ec, 0.4)
+    ctx.beginPath()
+    ctx.arc(e.x, e.y, e.radius + 5 + Math.sin(e.t * 6) * 2.5, 0, Math.PI * 2)
+    ctx.strokeStyle = ec
+    ctx.lineWidth = 2.5
+    ctx.stroke()
+    ctx.lineWidth = 1
+  }
   switch (e.kind) {
     case 'bug':
       drawPoly(ctx, e.x, e.y, e.radius, 3, e.angle, c, true)
@@ -278,12 +289,46 @@ export function render(
     }
   }
 
+  // burning ground (Meteor Storm) — flickering scorch pools under the action
+  for (const bp of state.burnPatches) {
+    const a = Math.min(1, bp.life / bp.maxLife) * (0.4 + 0.12 * Math.sin(state.time * 18 + bp.x))
+    drawGlow(ctx, bp.x, bp.y, bp.radius * 1.15, PALETTE.fire, a)
+    drawGlow(ctx, bp.x, bp.y, bp.radius * 0.55, '#ffd23e', a * 0.6)
+  }
+
   // gems & coins
   for (const g of state.gems) {
     const color = g.isCoin ? PALETTE.coin : PALETTE.xp
     const bob = Math.sin(g.t * 6) * 2
     drawGlow(ctx, g.x, g.y + bob, g.radius * 2.2, color, 0.6)
     drawPoly(ctx, g.x, g.y + bob, g.radius, 4, g.t * 2, color, true)
+  }
+
+  // ground pickups: glowing diamonds with a glyph; chests are gold boxes
+  ctx.textAlign = 'center'
+  for (const pk of state.pickups) {
+    if (pk.kind === 'chest') {
+      const pulse = 1 + Math.sin(pk.t * 5) * 0.08
+      drawGlow(ctx, pk.x, pk.y, 34 * pulse, PALETTE.coin, 0.85)
+      ctx.fillStyle = PALETTE.coin
+      ctx.fillRect(pk.x - 11 * pulse, pk.y - 8 * pulse, 22 * pulse, 16 * pulse)
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(pk.x - 11 * pulse, pk.y - 2, 22 * pulse, 2)
+      ctx.fillRect(pk.x - 1.5, pk.y - 2, 3, 5)
+      continue
+    }
+    const def = PICKUP_DEFS[pk.kind]
+    const fade = pk.life < PICKUPS.fadeTime ? Math.max(0, pk.life / PICKUPS.fadeTime) : 1
+    // blink while expiring so the fade reads as urgency
+    const alpha = fade * (fade < 1 && Math.sin(pk.t * 12) < 0 ? 0.4 : 1)
+    const bob = Math.sin(pk.t * 4) * 3
+    drawGlow(ctx, pk.x, pk.y + bob, 26, def.color, 0.75 * alpha)
+    ctx.globalAlpha = alpha
+    drawPoly(ctx, pk.x, pk.y + bob, 10, 4, 0, def.color, true)
+    ctx.fillStyle = '#ffffff'
+    ctx.font = "bold 10px 'Courier New', monospace"
+    ctx.fillText(def.glyph, pk.x, pk.y + bob + 3.5)
+    ctx.globalAlpha = 1
   }
 
   // enemy bullets
@@ -319,8 +364,25 @@ export function render(
     drawPoly(ctx, dx, dy, 6, 3, d.angle, '#64ffda', true)
   }
 
-  // player — glowing orb
+  // orbiting shield orbs — must match the collision pass's orbit math
+  if (p.shieldOrbs > 0) {
+    for (let i = 0; i < p.shieldOrbs; i++) {
+      const a = state.time * SHIELD_ORB.spin + (i / p.shieldOrbs) * Math.PI * 2
+      const ox = p.x + Math.cos(a) * SHIELD_ORB.orbit
+      const oy = p.y + Math.sin(a) * SHIELD_ORB.orbit
+      drawGlow(ctx, ox, oy, SHIELD_ORB.radius * 2.4, '#7c9bff', 0.85)
+      ctx.beginPath()
+      ctx.arc(ox, oy, SHIELD_ORB.radius * 0.6, 0, Math.PI * 2)
+      ctx.fillStyle = '#dbe6ff'
+      ctx.fill()
+    }
+  }
+
+  // player — glowing orb (brighter while overdrive is hot)
   const flash = p.hurtFlash > 0 && Math.sin(state.time * 40) > 0
+  if (p.overdriveT > 0) {
+    drawGlow(ctx, p.x, p.y, 56, PICKUP_DEFS.overdrive.color, 0.7)
+  }
   drawGlow(ctx, p.x, p.y, p.dashT > 0 ? 48 : 34, PALETTE.player, flash ? 0.4 : 1)
   ctx.beginPath()
   ctx.arc(p.x, p.y, 11, 0, Math.PI * 2)
@@ -333,6 +395,15 @@ export function render(
   ctx.strokeStyle = PALETTE.player
   ctx.lineWidth = 3
   ctx.stroke()
+  // overdrive countdown — shrinking arc just outside the dash ring
+  if (p.overdriveT > 0) {
+    const frac = p.overdriveT / PICKUPS.overdriveTime
+    ctx.beginPath()
+    ctx.arc(p.x, p.y, 22, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2)
+    ctx.strokeStyle = 'rgba(77, 216, 255, 0.8)'
+    ctx.lineWidth = 3
+    ctx.stroke()
+  }
   // dash cooldown ring: sweeps closed while recharging, flares when ready
   if (p.dashCd > 0) {
     const frac = 1 - p.dashCd / DASH.cooldown
@@ -369,6 +440,12 @@ export function render(
   ctx.globalAlpha = 1
 
   ctx.restore()
+
+  // nuke pickup — full-screen white flash that decays fast
+  if (state.flashT > 0) {
+    ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(1, state.flashT / 0.35) * 0.8})`
+    ctx.fillRect(0, 0, w, h)
+  }
 
   // environment transition banner — fades in, holds, fades out
   if (state.envBannerT > 0) {
