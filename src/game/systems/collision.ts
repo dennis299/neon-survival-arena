@@ -177,6 +177,19 @@ export function resolveCollisions(state: GameState) {
   const scratch: Enemy[] = []
   const p = state.player
 
+  // --- nova pulse ---
+  if (p.triggerNova) {
+    p.triggerNova = false
+    const radius = 100 + p.novaLevel * 40
+    const damage = p.damage * 1.5 * p.novaLevel
+    explode(state, grid, p.x, p.y, radius, damage, scratch)
+
+    // extra visual pop for the nova
+    for (let i = 0; i < 3; i++) {
+      spawnBurst(state, p.x, p.y, '#ff5db1', 12, radius * 1.5, 5, 0.6, true)
+    }
+  }
+
   // --- player bullets vs enemies & boss ---
   const bullets = state.bullets
   for (let i = bullets.length - 1; i >= 0; i--) {

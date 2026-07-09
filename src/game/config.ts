@@ -97,6 +97,7 @@ export function basePlayerStats(): PlayerStats {
     fireLevel: 0,
     iceLevel: 0,
     drones: 0,
+    novaLevel: 0,
   }
 }
 
@@ -175,6 +176,11 @@ export const UPGRADES: UpgradeDef[] = [
     id: 'drone', name: 'Drone Companion', icon: '🛸', maxLevel: 3, minPlayerLevel: 3,
     color: '#64ffda', desc: 'Orbiting drone that auto-fires',
     apply: (s) => { s.drones += 1 },
+  },
+  {
+    id: 'nova', name: 'Nova Pulse', icon: '💥', maxLevel: 3, minPlayerLevel: 5,
+    color: '#ff5db1', desc: 'Emits a damaging shockwave every 4.5s (faster per level)',
+    apply: (s) => { s.novaLevel += 1 },
   },
 ]
 

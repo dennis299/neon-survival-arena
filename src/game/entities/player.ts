@@ -16,6 +16,8 @@ export function createPlayer(character: CharacterDef): Player {
     regenT: 0,
     hurtFlash: 0,
     iframes: 0,
+    novaT: 0,
+    triggerNova: false,
   }
 }
 
@@ -36,4 +38,12 @@ export function updatePlayer(state: GameState, input: InputState, dt: number) {
   }
   p.hurtFlash = Math.max(0, p.hurtFlash - dt)
   p.iframes = Math.max(0, p.iframes - dt)
+
+  if (p.novaLevel > 0) {
+    p.novaT -= dt
+    if (p.novaT <= 0) {
+      p.novaT = Math.max(1.5, 4.5 - p.novaLevel * 0.5)
+      p.triggerNova = true
+    }
+  }
 }
