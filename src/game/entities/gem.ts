@@ -20,12 +20,15 @@ const GEM_ACCEL_PER_MAGNET = 9
 const GEM_MIN_SPEED_PER_MAGNET = 2.6
 
 export function dropGem(state: GameState, x: number, y: number, value: number) {
-  // merge into fewer, bigger gems if the field is saturated (perf guard)
+  // merge into fewer, bigger gems if the field is saturated (perf guard);
+  // resample a few times so a coin-heavy field can't bypass the cap
   if (state.gems.length > GEM_CAP) {
-    const g = state.gems[(rng() * state.gems.length) | 0]
-    if (!g.isCoin) {
-      g.value += value
-      return
+    for (let tries = 0; tries < 4; tries++) {
+      const g = state.gems[(rng() * state.gems.length) | 0]
+      if (!g.isCoin) {
+        g.value += value
+        return
+      }
     }
   }
   state.gems.push({

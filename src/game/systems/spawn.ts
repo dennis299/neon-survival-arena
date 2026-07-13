@@ -17,10 +17,10 @@ function spawnInterval(time: number, mods: RunMods): number {
   // ease-out so early game ramps quickly enough to stay exciting
   const eased = 1 - Math.pow(1 - t, 1.6)
   const floor = DIFFICULTY.spawnFloor * mods.spawnFloorMult
-  return Math.max(
-    floor,
-    (DIFFICULTY.spawnStart + (floor - DIFFICULTY.spawnStart) * eased) / mods.spawnRateMult,
-  )
+  // rate mult divides the whole interval (including the floor) — otherwise
+  // the Math.max clamp would cancel it once the ramp completes
+  const base = DIFFICULTY.spawnStart + (floor - DIFFICULTY.spawnStart) * eased
+  return Math.max(floor, base) / mods.spawnRateMult
 }
 
 export function difficultyMults(time: number): { hp: number; speed: number } {

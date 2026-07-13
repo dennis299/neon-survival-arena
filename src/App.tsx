@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import MainMenu from './components/MainMenu'
 import OrientationGate from './components/OrientationGate'
 import GameScreen from './GameScreen'
-import { CHARACTERS, PERM_UPGRADES, dailyKey, permUpgradeCost } from './game/config'
+import { CHARACTERS, PERM_UPGRADES, permUpgradeCost } from './game/config'
 import { evaluateRunAchievements } from './game/achievements'
 import { setMuted, unlockAudio } from './game/audio'
 import { setHapticsEnabled } from './game/haptics'
@@ -37,12 +37,15 @@ export default function App() {
   }, [save.settings.haptics])
 
   const updateSave = useCallback((next: SaveData) => {
+    // refresh the ref synchronously — two callback-driven saves inside one
+    // React commit window must not read the same stale snapshot
+    saveRef.current = next
     setSave(next)
     writeSave(next)
   }, [])
 
   const handleRunEnd = useCallback(
-    (stats: RunStats, meta: { daily: boolean; practice: boolean }): string[] => {
+    (stats: RunStats, meta: { daily: boolean; practice: boolean; dateKey: string }): string[] => {
       const cur = saveRef.current
       const character = meta.daily
         ? 'Daily'
@@ -58,9 +61,11 @@ export default function App() {
         totalChests: cur.totalChests + stats.chestsOpened,
         achievements: [...cur.achievements, ...newAch],
       }
-      // first daily finish of the UTC day is the real attempt
+      // first daily finish of the UTC day is the real attempt; use the key
+      // captured at run START so a run crossing UTC midnight banks under the
+      // day whose seed/modifier it actually played
       if (meta.daily && !meta.practice) {
-        next = { ...next, dailyAttempt: { date: dailyKey(), time: stats.time } }
+        next = { ...next, dailyAttempt: { date: meta.dateKey, time: stats.time } }
       }
       next = addLeaderboardEntry(next, {
         time: stats.time,

@@ -43,6 +43,11 @@ export const KILLER_NAMES: Record<EnemyKind, string> = {
   shield: 'A SHIELD GUARD',
 }
 
+/** precomputed so the contact-damage hot path never builds a regex/template */
+const ELITE_KILLER_NAMES: Record<EnemyKind, string> = Object.fromEntries(
+  Object.entries(KILLER_NAMES).map(([k, name]) => [k, `AN ELITE ${name.replace(/^AN? /, '')}`]),
+) as Record<EnemyKind, string>
+
 type Grid = Map<number, Enemy[]>
 
 function cellKey(cx: number, cy: number): number {
@@ -450,11 +455,7 @@ export function resolveCollisions(state: GameState, dt: number) {
       if (e.dead) continue
       const r = e.radius + 12
       if ((e.x - p.x) ** 2 + (e.y - p.y) ** 2 < r * r) {
-        hurtPlayer(
-          state,
-          e.damage,
-          e.elite ? `AN ELITE ${KILLER_NAMES[e.kind].replace(/^AN? /, '')}` : KILLER_NAMES[e.kind],
-        )
+        hurtPlayer(state, e.damage, e.elite ? ELITE_KILLER_NAMES[e.kind] : KILLER_NAMES[e.kind])
         // vampiric elites heal to full off contact damage
         if (e.elite === 'vampiric' && e.hp < e.maxHp) {
           e.hp = e.maxHp

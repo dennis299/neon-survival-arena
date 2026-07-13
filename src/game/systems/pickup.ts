@@ -36,6 +36,9 @@ export function updatePickups(state: GameState, dt: number, viewW: number, viewH
       continue
     }
     if ((pk.x - p.x) ** 2 + (pk.y - p.y) ** 2 > PICKUPS.radius * PICKUPS.radius) continue
+    // a dying player can still drift — don't consume pickups (especially
+    // chests, whose reward flow is gated off during the death cinematic)
+    if (state.dying) continue
 
     switch (pk.kind) {
       case 'health': {

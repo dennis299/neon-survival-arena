@@ -62,7 +62,7 @@ export default function GameScreen({
   /** daily-challenge run: fixed character, seeded sim, day's modifier active */
   daily: boolean
   /** bank the run into the save; returns ids of newly earned achievements */
-  onRunEnd: (stats: RunStats, meta: { daily: boolean; practice: boolean }) => string[]
+  onRunEnd: (stats: RunStats, meta: { daily: boolean; practice: boolean; dateKey: string }) => string[]
   /** bank achievements earned mid-run immediately (crash-safe) */
   onLiveAchievements: (ids: string[]) => void
   onAbandon: (coins: number, kills: number) => void
@@ -94,6 +94,9 @@ export default function GameScreen({
   const liveEarnedRef = useRef<string[]>([])
   const baseTotalsRef = useRef({ kills: 0, coins: 0 })
   const practiceRef = useRef(false)
+  // daily identity captured at run START — a run crossing UTC midnight must
+  // bank and submit under the day whose seed/modifier it actually played
+  const dailyIdsRef = useRef({ key: '', board: '' })
   const toastKeyRef = useRef(0)
   const toastTimersRef = useRef<number[]>([])
 
@@ -114,7 +117,8 @@ export default function GameScreen({
     liveEarnedRef.current = []
     baseTotalsRef.current = { kills: save.totalKills, coins: save.coins }
     // the first daily finish of the UTC day is the real attempt; replays are practice
-    practiceRef.current = daily && save.dailyAttempt?.date === dailyKey()
+    dailyIdsRef.current = { key: dailyKey(), board: dailyBoardId() }
+    practiceRef.current = daily && save.dailyAttempt?.date === dailyIdsRef.current.key
     setHud(EMPTY_HUD)
     setChoices(null)
     setChest(null)
@@ -145,7 +149,10 @@ export default function GameScreen({
             lastEnvIdRef.current = h.envId
             musicRef.current?.setTheme(h.envId)
           }
-          // achievement milestones toast the moment they happen, not at the recap
+          // achievement milestones toast the moment they happen, not at the
+          // recap — but not once the player is dead: residual bullets keep
+          // killing during the cinematic and must not unlock anything
+          if (h.hp <= 0) return
           const fresh = evaluateLiveAchievements(
             h,
             earnedRef.current,
@@ -174,7 +181,7 @@ export default function GameScreen({
         onGameOver: (stats) => {
           bankedRef.current = true
           const practice = practiceRef.current
-          const endEarned = onRunEnd(stats, { daily, practice })
+          const endEarned = onRunEnd(stats, { daily, practice, dateKey: dailyIdsRef.current.key })
           setNewAchievements([...liveEarnedRef.current, ...endEarned])
           setGameOver(stats)
           // practice daily replays stay off the global board
@@ -186,10 +193,10 @@ export default function GameScreen({
               kills: stats.kills,
               level: stats.level,
               bosses: stats.bossesKilled,
-              characterId: daily ? dailyBoardId() : save.selectedCharacter,
+              characterId: daily ? dailyIdsRef.current.board : save.selectedCharacter,
             }).then(async (ok) => {
               setSubmitStatus(ok ? 'ok' : 'error')
-              if (ok) setGlobalRank(await fetchRankFor(stats.time, daily ? dailyBoardId() : undefined))
+              if (ok) setGlobalRank(await fetchRankFor(stats.time, daily ? dailyIdsRef.current.board : undefined))
             })
           }
         },

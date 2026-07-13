@@ -306,6 +306,7 @@ export function render(
 
   // ground pickups: glowing diamonds with a glyph; chests are gold boxes
   ctx.textAlign = 'center'
+  ctx.font = "bold 10px 'Courier New', monospace"
   for (const pk of state.pickups) {
     if (pk.kind === 'chest') {
       const pulse = 1 + Math.sin(pk.t * 5) * 0.08

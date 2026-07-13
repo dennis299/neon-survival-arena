@@ -308,6 +308,10 @@ export function createGame(canvas: HTMLCanvasElement, opts: GameOptions): GameCo
       state.paused = !state.paused
     }
 
+    // a dash pressed while paused (picker/chest/menu open) must not stay
+    // latched and fire on the first frame after resume
+    if (state.paused || !state.running) input.consumeDash()
+
     if (state.running && !state.paused) {
       // death cinematic: sim crawls, camera pushes in, then the recap fires
       if (state.dying) {
@@ -341,7 +345,8 @@ export function createGame(canvas: HTMLCanvasElement, opts: GameOptions): GameCo
 
   return {
     pause: () => {
-      if (!state.over) state.paused = true
+      // pausing mid-death-cinematic would freeze deathT and defer the recap
+      if (!state.over && !state.dying) state.paused = true
     },
     resume: () => {
       if (!levelUpPending && !chestOpen) state.paused = false
