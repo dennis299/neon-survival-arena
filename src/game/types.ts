@@ -17,9 +17,13 @@ export type EnemyKind =
 
 export type BossKind = 'robot' | 'worm' | 'queen'
 
+export type EliteMod = 'swift' | 'regenerating' | 'splitting' | 'vampiric'
+
 export interface Enemy {
   id: number
   kind: EnemyKind
+  /** rare buffed variant; drops a treasure chest */
+  elite?: EliteMod
   x: number
   y: number
   vx: number
@@ -41,6 +45,8 @@ export interface Enemy {
   phase: number
   /** facing angle — shield enemies block damage from this direction */
   angle: number
+  /** per-enemy cooldown before an orbiting shield orb can hit it again */
+  orbHitT: number
   dead: boolean
 }
 
@@ -82,6 +88,8 @@ export interface Bullet {
   fire: boolean
   ice: boolean
   fromDrone: boolean
+  /** ricochets taken so far — Bullet Hell stops decrementing, so cap here */
+  bounces: number
   hitIds: Set<number>
 }
 
@@ -93,6 +101,8 @@ export interface EnemyBullet {
   damage: number
   radius: number
   life: number
+  /** what to blame on the death screen if this projectile lands the kill */
+  source: string
 }
 
 export interface Gem {
@@ -147,6 +157,29 @@ export interface Drone {
   fireT: number
 }
 
+export type PickupKind = 'health' | 'magnet' | 'nuke' | 'overdrive' | 'chest'
+
+/** Ground power-up. Chests never expire; the rest fade out near end of life. */
+export interface Pickup {
+  x: number
+  y: number
+  kind: PickupKind
+  t: number
+  /** seconds until despawn (Infinity for chests) */
+  life: number
+  /** chest only: reward count rolled when opened */
+  rewards: number
+}
+
+/** Burning ground left behind by Meteor Storm explosions. */
+export interface BurnPatch {
+  x: number
+  y: number
+  radius: number
+  life: number
+  maxLife: number
+}
+
 /** All stackable player stats. Upgrades mutate this. */
 export interface PlayerStats {
   damage: number
@@ -168,6 +201,21 @@ export interface PlayerStats {
   iceLevel: number
   drones: number
   novaLevel: number
+  /** orbiting melee orbs (Orbiting Shield upgrade) */
+  shieldOrbs: number
+  /** XP multiplier (Neural Link upgrade), 1 = none */
+  xpMult: number
+  /** coin gain multiplier (Coin Doubler perm upgrade / Rich Rush daily), 1 = none */
+  coinMult: number
+  // --- weapon evolution flags ---
+  /** Meteor Storm: explosions leave burning ground */
+  burningGround: boolean
+  /** Static Field: periodic auto arc-storm that zaps + slows */
+  staticField: boolean
+  /** Bullet Hell: ricochets no longer decrement */
+  bulletHell: boolean
+  /** Orbital Array: drones fire 2x, novas add a radial bullet ring */
+  orbitalArray: boolean
 }
 
 export interface Player extends PlayerStats {
@@ -182,6 +230,17 @@ export interface Player extends PlayerStats {
   iframes: number
   novaT: number
   triggerNova: boolean
+  /** seconds of dash burst remaining (0 = not dashing) */
+  dashT: number
+  /** seconds until the dash is ready again */
+  dashCd: number
+  dashDirX: number
+  dashDirY: number
+  /** seconds of 2x fire rate remaining (overdrive pickup) */
+  overdriveT: number
+  /** Static Field evolution: countdown to the next arc storm */
+  staticT: number
+  triggerStatic: boolean
 }
 
 export interface UpgradeDef {
@@ -196,10 +255,34 @@ export interface UpgradeDef {
   apply: (s: PlayerStats, level: number) => void
 }
 
+/** Weapon evolution: unlocked by maxing both prerequisite upgrade lines.
+ * Guaranteed to appear in the next level-up roll once eligible. */
+export interface EvolutionDef {
+  id: string
+  name: string
+  desc: string
+  icon: string
+  color: string
+  /** both upgrade ids must be at maxLevel */
+  requires: [string, string]
+  apply: (s: PlayerStats) => void
+}
+
 export interface UpgradeChoice {
-  def: UpgradeDef
+  def: UpgradeDef | EvolutionDef
   /** level this pick would bring the upgrade to (1-based) */
   nextLevel: number
+  isEvolution?: boolean
+}
+
+/** One reward inside a treasure chest, already rolled (applied on CLAIM). */
+export interface ChestReward {
+  name: string
+  icon: string
+  color: string
+  desc: string
+  /** level the upgrade reaches; 0 = coin payout */
+  level: number
 }
 
 export interface CharacterDef {
@@ -211,6 +294,41 @@ export interface CharacterDef {
   mod: (s: PlayerStats) => void
 }
 
+/** Run-wide modifier knobs set by the daily challenge; all neutral by default
+ * (see defaultRunMods in config). Read by the spawn director. */
+export interface RunMods {
+  /** divides the spawn interval — 2 = twice the spawn pressure */
+  spawnRateMult: number
+  /** scales the spawn-interval floor — 0.5 = late-game pressure hits harder */
+  spawnFloorMult: number
+  /** per-kind spawn weight multiplier; 0 removes the kind entirely */
+  weightMult: Partial<Record<EnemyKind, number>>
+  /** enemy move-speed multiplier applied at spawn */
+  enemySpeedMult: number
+  /** overrides ELITE.chance when set */
+  eliteChance: number | null
+}
+
+/** One daily-challenge modifier; rotates by UTC day-of-week. */
+export interface DailyModDef {
+  id: string
+  name: string
+  desc: string
+  apply: (s: PlayerStats, mods: RunMods) => void
+}
+
+/** Permanent (coin-bought, persists across runs) player upgrade.
+ * Cost of the next rank = baseCost * (rank + 1). */
+export interface PermUpgradeDef {
+  id: string
+  name: string
+  icon: string
+  desc: string
+  maxRank: number
+  baseCost: number
+  apply: (s: PlayerStats, rank: number) => void
+}
+
 export interface RunStats {
   time: number
   kills: number
@@ -218,6 +336,15 @@ export interface RunStats {
   coins: number
   bossesKilled: number
   damageDealt: number
+  maxCombo: number
+  /** weapon evolutions taken this run */
+  evolutions: number
+  eliteKills: number
+  dashes: number
+  nukesUsed: number
+  chestsOpened: number
+  /** what landed the killing blow, e.g. "GIANT ROBOT" */
+  killedBy: string
   upgrades: { name: string; level: number; icon: string; color: string }[]
   newBest: boolean
 }
@@ -237,11 +364,22 @@ export interface HudSnapshot {
   fps: number
   envId: string
   envName: string
+  combo: number
+  comboMult: number
+  maxCombo: number
+  /** weapon evolutions taken so far — live achievement checks */
+  evolutions: number
+  /** the personal best this run is chasing (0 = none yet) */
+  bestTime: number
+  /** 0..1 how hairy things are right now — drives the music's intensity */
+  danger: number
 }
 
 export interface GameCallbacks {
   onHud: (h: HudSnapshot) => void
   onLevelUp: (choices: UpgradeChoice[]) => void
+  /** treasure chest touched — sim pauses until controls.claimChest() */
+  onChest: (rewards: ChestReward[]) => void
   onGameOver: (stats: RunStats) => void
 }
 
@@ -262,6 +400,8 @@ export interface GameState {
   bullets: Bullet[]
   enemyBullets: EnemyBullet[]
   gems: Gem[]
+  pickups: Pickup[]
+  burnPatches: BurnPatch[]
   particles: Particle[]
   texts: FloatingText[]
   droneUnits: Drone[]
@@ -282,4 +422,37 @@ export interface GameState {
   envBannerT: number
   /** caps particle/ambient counts for battery/perf on lower-end devices */
   lowEffects: boolean
+  /** kill-streak count; decays when the combo window lapses */
+  combo: number
+  /** seconds left in the combo window */
+  comboT: number
+  maxCombo: number
+  /** seconds of frame-freeze remaining (impact frames) */
+  hitStop: number
+  /** sim speed, 1 = normal; the death slow-mo ramps this down */
+  timeScale: number
+  /** death cinematic in progress — sim keeps running slow, input ignored */
+  dying: boolean
+  deathT: number
+  /** camera zoom, eased toward deathZoom during the death cinematic */
+  zoom: number
+  /** last thing that damaged the player, blamed on the recap screen */
+  lastHitBy: string
+  /** owned weapon evolution ids */
+  evolutions: string[]
+  /** reward count of a chest touched this frame; loop opens it (0 = none) */
+  chestPendingRewards: number
+  /** seconds of full-screen white flash remaining (nuke pickup) */
+  flashT: number
+  /** daily-challenge modifier knobs; neutral for normal runs */
+  mods: RunMods
+  // --- per-run achievement counters ---
+  eliteKills: number
+  dashes: number
+  nukesUsed: number
+  chestsOpened: number
+  /** run time has passed the personal best (fires the banner/sting once) */
+  pbBeaten: boolean
+  /** seconds remaining on the "NEW RECORD" banner */
+  pbBannerT: number
 }

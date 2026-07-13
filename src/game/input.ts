@@ -24,9 +24,13 @@ export interface InputState {
   left: JoystickState
   right: JoystickState
   pausePressed: boolean
+  dashPressed: boolean
 }
 
 const JOY_RADIUS = 56
+/** touch dash button: distance from the bottom-right corner + hit radius */
+export const DASH_BTN_OFFSET = 84
+export const DASH_BTN_RADIUS = 40
 
 export function detectTouchMode(): boolean {
   return window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window
@@ -45,9 +49,11 @@ export function createInput(canvas: HTMLCanvasElement) {
     left: { active: false, ox: 0, oy: 0, dx: 0, dy: 0, pointerId: -1 },
     right: { active: false, ox: 0, oy: 0, dx: 0, dy: 0, pointerId: -1 },
     pausePressed: false,
+    dashPressed: false,
   }
 
   const onKeyDown = (e: KeyboardEvent) => {
+    if (e.code === 'Space' && !keys.has('Space')) state.dashPressed = true
     keys.add(e.code)
     if (e.code === 'Escape' || e.code === 'KeyP') state.pausePressed = true
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
@@ -61,12 +67,25 @@ export function createInput(canvas: HTMLCanvasElement) {
     mouseY = e.clientY - r.top
   }
 
+  const onMouseDown = (e: MouseEvent) => {
+    if (e.button === 2) state.dashPressed = true
+  }
+  const onContextMenu = (e: Event) => e.preventDefault()
+
   const onPointerDown = (e: PointerEvent) => {
     if (e.pointerType !== 'touch') return
     state.touchMode = true
     const r = canvas.getBoundingClientRect()
     const x = e.clientX - r.left
     const y = e.clientY - r.top
+    // dash button claims touches near the bottom-right corner before the aim stick
+    const bx = r.width - DASH_BTN_OFFSET
+    const by = r.height - DASH_BTN_OFFSET
+    if (Math.hypot(x - bx, y - by) < DASH_BTN_RADIUS + 10) {
+      state.dashPressed = true
+      e.preventDefault()
+      return
+    }
     const stick = x < r.width / 2 ? state.left : state.right
     if (stick.active) return
     stick.active = true
@@ -109,6 +128,8 @@ export function createInput(canvas: HTMLCanvasElement) {
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
   canvas.addEventListener('mousemove', onMouseMove)
+  canvas.addEventListener('mousedown', onMouseDown)
+  canvas.addEventListener('contextmenu', onContextMenu)
   canvas.addEventListener('pointerdown', onPointerDown)
   canvas.addEventListener('pointermove', onPointerMove)
   canvas.addEventListener('pointerup', onPointerUp)
@@ -147,17 +168,25 @@ export function createInput(canvas: HTMLCanvasElement) {
     return p
   }
 
+  function consumeDash(): boolean {
+    const d = state.dashPressed
+    state.dashPressed = false
+    return d
+  }
+
   function destroy() {
     window.removeEventListener('keydown', onKeyDown)
     window.removeEventListener('keyup', onKeyUp)
     canvas.removeEventListener('mousemove', onMouseMove)
+    canvas.removeEventListener('mousedown', onMouseDown)
+    canvas.removeEventListener('contextmenu', onContextMenu)
     canvas.removeEventListener('pointerdown', onPointerDown)
     canvas.removeEventListener('pointermove', onPointerMove)
     canvas.removeEventListener('pointerup', onPointerUp)
     canvas.removeEventListener('pointercancel', onPointerUp)
   }
 
-  return { poll, consumePause, destroy, state }
+  return { poll, consumePause, consumeDash, destroy, state }
 }
 
 export type Input = ReturnType<typeof createInput>

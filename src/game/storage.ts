@@ -12,12 +12,22 @@ export interface LeaderboardEntry {
 export interface SaveData {
   coins: number
   totalKills: number
+  totalBosses: number
+  totalElites: number
+  totalDashes: number
+  totalChests: number
   bestTime: number
   unlockedCharacters: string[]
   selectedCharacter: string
   leaderboard: LeaderboardEntry[]
   achievements: string[]
   playerName: string
+  /** rank per permanent-upgrade id (see PERM_UPGRADES) */
+  permUpgrades: Record<string, number>
+  /** first daily-challenge finish of the UTC day; replays are practice */
+  dailyAttempt: { date: string; time: number } | null
+  /** first-run control hints shown and dismissed */
+  seenTutorial: boolean
   settings: {
     muted: boolean
     screenShake: number
@@ -36,12 +46,19 @@ function defaults(): SaveData {
   return {
     coins: 0,
     totalKills: 0,
+    totalBosses: 0,
+    totalElites: 0,
+    totalDashes: 0,
+    totalChests: 0,
     bestTime: 0,
     unlockedCharacters: ['vanguard'],
     selectedCharacter: 'vanguard',
     leaderboard: [],
     achievements: [],
     playerName: randomName(),
+    permUpgrades: {},
+    dailyAttempt: null,
+    seenTutorial: false,
     settings: { muted: false, screenShake: 1, haptics: true, reduceEffects: false },
   }
 }

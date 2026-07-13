@@ -24,6 +24,9 @@ export default function GameOver({
   newAchievements,
   playerName,
   submitStatus,
+  globalRank,
+  dailyName,
+  dailyPractice,
   onRetry,
   onMenu,
 }: {
@@ -31,13 +34,30 @@ export default function GameOver({
   newAchievements: string[]
   playerName: string
   submitStatus: SubmitStatus
+  globalRank: number | null
+  /** daily-challenge run: the day's modifier name (null for normal runs) */
+  dailyName: string | null
+  /** replay after today's real attempt — not submitted anywhere */
+  dailyPractice: boolean
   onRetry: () => void
   onMenu: () => void
 }) {
   return (
     <div className="overlay">
       <h2 className="overlay-title glow-text danger-text">RUN OVER</h2>
+      {dailyName && (
+        <div className="daily-recap">
+          📅 DAILY CHALLENGE — {dailyName.toUpperCase()}
+          {dailyPractice && <span className="daily-practice"> · PRACTICE</span>}
+        </div>
+      )}
+      <div className="killed-by">☠ KILLED BY {stats.killedBy}</div>
       {stats.newBest && <div className="new-best">★ NEW BEST TIME ★</div>}
+      {globalRank !== null && (
+        <div className="global-rank">
+          #{globalRank.toLocaleString()} WORLDWIDE
+        </div>
+      )}
       <div className="recap-time">{formatTime(stats.time)}</div>
       <div className="recap-grid">
         <div className="recap-stat">
@@ -55,6 +75,10 @@ export default function GameOver({
         <div className="recap-stat">
           <span className="recap-num">{stats.damageDealt.toLocaleString()}</span>
           <span>damage</span>
+        </div>
+        <div className="recap-stat">
+          <span className="recap-num">{stats.maxCombo}</span>
+          <span>max combo</span>
         </div>
         <div className="recap-stat coin">
           <span className="recap-num">+{stats.coins}</span>

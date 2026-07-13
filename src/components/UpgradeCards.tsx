@@ -1,11 +1,11 @@
-import type { UpgradeChoice, UpgradeDef } from '../game/types'
+import type { EvolutionDef, UpgradeChoice, UpgradeDef } from '../game/types'
 
 export default function UpgradeCards({
   choices,
   onPick,
 }: {
   choices: UpgradeChoice[]
-  onPick: (def: UpgradeDef) => void
+  onPick: (def: UpgradeDef | EvolutionDef) => void
 }) {
   return (
     <div className="overlay">
@@ -15,14 +15,14 @@ export default function UpgradeCards({
         {choices.map((c) => (
           <button
             key={c.def.id}
-            className="card"
+            className={c.isEvolution ? 'card evolution' : 'card'}
             style={{ ['--card-color' as string]: c.def.color }}
             onClick={() => onPick(c.def)}
           >
             <span className="card-icon">{c.def.icon}</span>
             <span className="card-name">{c.def.name}</span>
             <span className="card-level">
-              {c.nextLevel > 1 ? `LV ${c.nextLevel}` : 'NEW'}
+              {c.isEvolution ? 'EVOLUTION' : c.nextLevel > 1 ? `LV ${c.nextLevel}` : 'NEW'}
             </span>
             <span className="card-desc">{c.def.desc}</span>
           </button>

@@ -149,10 +149,64 @@ export const sfx = {
     if (throttled('hurt', 200)) return
     tone(160, 0.25, 'sawtooth', 0.25, 60)
   },
+  dash() {
+    if (throttled('dash', 150)) return
+    noise(0.14, 0.14, 3200, 400)
+    tone(340, 0.12, 'sine', 0.12, 680)
+  },
+  /** rising fanfare pitched by the streak multiplier tier */
+  comboTier(mult: number) {
+    const base = 660 + mult * 120
+    tone(base, 0.1, 'square', 0.1)
+    setTimeout(() => tone(base * 1.25, 0.12, 'square', 0.1), 70)
+  },
+  comboBreak() {
+    tone(520, 0.16, 'sawtooth', 0.12, 180)
+  },
   levelUp() {
     ;[523, 659, 784, 1047].forEach((f, i) => {
       setTimeout(() => tone(f, 0.18, 'triangle', 0.16), i * 90)
     })
+  },
+  /** evolution fanfare — bigger than levelUp: longer run + shimmer noise */
+  evolution() {
+    ;[392, 523, 659, 784, 1047, 1319, 1568].forEach((f, i) => {
+      setTimeout(() => {
+        tone(f, 0.26, 'triangle', 0.18)
+        tone(f * 2, 0.2, 'sine', 0.06)
+      }, i * 85)
+    })
+    noise(0.7, 0.1, 3200, 500)
+  },
+  staticZap() {
+    if (throttled('zap', 200)) return
+    tone(1400, 0.09, 'sawtooth', 0.08, 240)
+    noise(0.08, 0.06, 4200, 900)
+  },
+  pickupHealth() {
+    tone(660, 0.1, 'sine', 0.14, 990)
+    setTimeout(() => tone(990, 0.14, 'sine', 0.12), 80)
+  },
+  pickupMagnet() {
+    tone(440, 0.35, 'sine', 0.14, 1760)
+  },
+  pickupNuke() {
+    noise(0.8, 0.4, 1800, 40)
+    tone(55, 0.7, 'sine', 0.35, 18)
+  },
+  pickupOverdrive() {
+    tone(220, 0.09, 'square', 0.12, 880)
+    setTimeout(() => tone(440, 0.12, 'square', 0.1, 1320), 80)
+  },
+  chestOpen() {
+    tone(392, 0.12, 'triangle', 0.14)
+    setTimeout(() => tone(523, 0.16, 'triangle', 0.14), 110)
+  },
+  /** rising jingle, pitched by reveal index */
+  chestReward(i: number) {
+    const f = 659 + i * 131
+    tone(f, 0.14, 'triangle', 0.16)
+    setTimeout(() => tone(f * 1.5, 0.18, 'triangle', 0.14), 90)
   },
   pick() {
     tone(660, 0.12, 'triangle', 0.14, 880)
@@ -175,6 +229,20 @@ export const sfx = {
   gameOver() {
     ;[392, 330, 262, 196].forEach((f, i) => {
       setTimeout(() => tone(f, 0.35, 'triangle', 0.2), i * 200)
+    })
+  },
+  /** short two-note chime for an in-run achievement toast */
+  achievement() {
+    tone(1047, 0.1, 'triangle', 0.14)
+    setTimeout(() => tone(1568, 0.16, 'triangle', 0.12), 90)
+  },
+  /** triumphant rising arpeggio — live personal-best crossed */
+  newRecord() {
+    ;[659, 784, 988, 1319].forEach((f, i) => {
+      setTimeout(() => {
+        tone(f, 0.18, 'triangle', 0.16)
+        tone(f * 2, 0.14, 'sine', 0.05)
+      }, i * 80)
     })
   },
 }

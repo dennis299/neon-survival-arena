@@ -3,10 +3,10 @@
 // for hundreds of entities), dark grid arena, camera locked to the player
 // with decaying screen shake.
 
-import { ENEMY_COLORS, PALETTE } from './config'
+import { DASH, ELITE_COLORS, ENEMY_COLORS, PALETTE, PICKUPS, PICKUP_DEFS, SHIELD_ORB } from './config'
 import { ENVIRONMENTS } from './environments'
 import type { Boss, Enemy, GameState } from './types'
-import type { InputState } from './input'
+import { DASH_BTN_OFFSET, DASH_BTN_RADIUS, type InputState } from './input'
 
 const glowCache = new Map<string, HTMLCanvasElement>()
 
@@ -68,6 +68,17 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, bgColor: string) {
   const flash = e.hitFlash > 0
   const c = flash ? '#ffffff' : color
   drawGlow(ctx, e.x, e.y, e.radius * 2.4, color, 0.5)
+  // elite aura: bigger glow + pulsing modifier-colored ring
+  if (e.elite) {
+    const ec = ELITE_COLORS[e.elite]
+    drawGlow(ctx, e.x, e.y, e.radius * 3.2, ec, 0.4)
+    ctx.beginPath()
+    ctx.arc(e.x, e.y, e.radius + 5 + Math.sin(e.t * 6) * 2.5, 0, Math.PI * 2)
+    ctx.strokeStyle = ec
+    ctx.lineWidth = 2.5
+    ctx.stroke()
+    ctx.lineWidth = 1
+  }
   switch (e.kind) {
     case 'bug':
       drawPoly(ctx, e.x, e.y, e.radius, 3, e.angle, c, true)
@@ -127,7 +138,15 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, bgColor: string) {
   }
 }
 
-function drawBoss(ctx: CanvasRenderingContext2D, b: Boss, time: number, bgColor: string) {
+function drawBoss(
+  ctx: CanvasRenderingContext2D,
+  b: Boss,
+  time: number,
+  bgColor: string,
+  px: number,
+  py: number,
+) {
+  const flashPulse = 0.4 + Math.abs(Math.sin(time * 14)) * 0.6
   if (b.hidden) {
     // rumbling ground marker
     const pulse = 1 + Math.sin(time * 18) * 0.2
@@ -137,6 +156,16 @@ function drawBoss(ctx: CanvasRenderingContext2D, b: Boss, time: number, bgColor:
     ctx.lineWidth = 3
     ctx.stroke()
     drawGlow(ctx, b.x, b.y, 40, '#b464ff', 0.35)
+    // eruption telegraph: danger ring flares in the last half-second underground
+    if (b.t > 1.2) {
+      const t = Math.min(1, (b.t - 1.2) / 0.5)
+      ctx.beginPath()
+      ctx.arc(b.x, b.y, 70 - t * 30, 0, Math.PI * 2)
+      ctx.strokeStyle = `rgba(255, 61, 110, ${flashPulse * (0.4 + t * 0.6)})`
+      ctx.lineWidth = 4
+      ctx.stroke()
+      drawGlow(ctx, b.x, b.y, 60, '#ff3d6e', flashPulse * 0.5)
+    }
     return
   }
   const colors: Record<Boss['kind'], string> = {
@@ -146,6 +175,40 @@ function drawBoss(ctx: CanvasRenderingContext2D, b: Boss, time: number, bgColor:
   }
   const c = b.hitFlash > 0 ? '#ffffff' : colors[b.kind]
   drawGlow(ctx, b.x, b.y, b.radius * 2.6, colors[b.kind], 0.6)
+
+  // attack telegraphs — every big hit gets a visible wind-up so deaths feel fair
+  if (b.kind === 'robot') {
+    if (b.attackT > 3.5) {
+      // rocket volley: aim rays sweep out along the three launch angles
+      for (let i = -1; i <= 1; i++) {
+        const a = b.angle + i * 0.25
+        ctx.beginPath()
+        ctx.moveTo(b.x + Math.cos(a) * b.radius, b.y + Math.sin(a) * b.radius)
+        ctx.lineTo(b.x + Math.cos(a) * 240, b.y + Math.sin(a) * 240)
+        ctx.strokeStyle = `rgba(255, 154, 61, ${flashPulse * 0.5})`
+        ctx.lineWidth = 2
+        ctx.stroke()
+      }
+    }
+    if (b.t > 5.2 && Math.hypot(px - b.x, py - b.y) < 200) {
+      // ground slam: expanding warning ring around the blast zone
+      ctx.beginPath()
+      ctx.arc(b.x, b.y, 150, 0, Math.PI * 2)
+      ctx.strokeStyle = `rgba(255, 61, 110, ${flashPulse * 0.55})`
+      ctx.lineWidth = 3
+      ctx.stroke()
+    }
+  }
+  if (b.kind === 'queen' && b.attackT > 3.0) {
+    // radial burst: a ring collapses into the queen as the shot charges
+    const t = Math.min(1, (b.attackT - 3.0) / 0.4)
+    ctx.beginPath()
+    ctx.arc(b.x, b.y, b.radius + 26 - t * 22, 0, Math.PI * 2)
+    ctx.strokeStyle = `rgba(255, 93, 177, ${0.3 + t * 0.6})`
+    ctx.lineWidth = 3
+    ctx.stroke()
+  }
+
   switch (b.kind) {
     case 'robot':
       drawPoly(ctx, b.x, b.y, b.radius, 4, Math.PI / 4, c, true)
@@ -192,6 +255,12 @@ export function render(
   const camY = p.y - h / 2 + shakeY
 
   ctx.save()
+  // death cinematic zoom — scales the world around the screen center (player)
+  if (state.zoom !== 1) {
+    ctx.translate(w / 2, h / 2)
+    ctx.scale(state.zoom, state.zoom)
+    ctx.translate(-w / 2, -h / 2)
+  }
   ctx.translate(-camX, -camY)
 
   // grid
@@ -220,12 +289,47 @@ export function render(
     }
   }
 
+  // burning ground (Meteor Storm) — flickering scorch pools under the action
+  for (const bp of state.burnPatches) {
+    const a = Math.min(1, bp.life / bp.maxLife) * (0.4 + 0.12 * Math.sin(state.time * 18 + bp.x))
+    drawGlow(ctx, bp.x, bp.y, bp.radius * 1.15, PALETTE.fire, a)
+    drawGlow(ctx, bp.x, bp.y, bp.radius * 0.55, '#ffd23e', a * 0.6)
+  }
+
   // gems & coins
   for (const g of state.gems) {
     const color = g.isCoin ? PALETTE.coin : PALETTE.xp
     const bob = Math.sin(g.t * 6) * 2
     drawGlow(ctx, g.x, g.y + bob, g.radius * 2.2, color, 0.6)
     drawPoly(ctx, g.x, g.y + bob, g.radius, 4, g.t * 2, color, true)
+  }
+
+  // ground pickups: glowing diamonds with a glyph; chests are gold boxes
+  ctx.textAlign = 'center'
+  ctx.font = "bold 10px 'Courier New', monospace"
+  for (const pk of state.pickups) {
+    if (pk.kind === 'chest') {
+      const pulse = 1 + Math.sin(pk.t * 5) * 0.08
+      drawGlow(ctx, pk.x, pk.y, 34 * pulse, PALETTE.coin, 0.85)
+      ctx.fillStyle = PALETTE.coin
+      ctx.fillRect(pk.x - 11 * pulse, pk.y - 8 * pulse, 22 * pulse, 16 * pulse)
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(pk.x - 11 * pulse, pk.y - 2, 22 * pulse, 2)
+      ctx.fillRect(pk.x - 1.5, pk.y - 2, 3, 5)
+      continue
+    }
+    const def = PICKUP_DEFS[pk.kind]
+    const fade = pk.life < PICKUPS.fadeTime ? Math.max(0, pk.life / PICKUPS.fadeTime) : 1
+    // blink while expiring so the fade reads as urgency
+    const alpha = fade * (fade < 1 && Math.sin(pk.t * 12) < 0 ? 0.4 : 1)
+    const bob = Math.sin(pk.t * 4) * 3
+    drawGlow(ctx, pk.x, pk.y + bob, 26, def.color, 0.75 * alpha)
+    ctx.globalAlpha = alpha
+    drawPoly(ctx, pk.x, pk.y + bob, 10, 4, 0, def.color, true)
+    ctx.fillStyle = '#ffffff'
+    ctx.font = "bold 10px 'Courier New', monospace"
+    ctx.fillText(def.glyph, pk.x, pk.y + bob + 3.5)
+    ctx.globalAlpha = 1
   }
 
   // enemy bullets
@@ -251,7 +355,7 @@ export function render(
   for (const e of state.enemies) drawEnemy(ctx, e, env.bg)
 
   // boss
-  if (state.boss) drawBoss(ctx, state.boss, state.time, env.bg)
+  if (state.boss) drawBoss(ctx, state.boss, state.time, env.bg, p.x, p.y)
 
   // drones
   for (const d of state.droneUnits) {
@@ -261,9 +365,26 @@ export function render(
     drawPoly(ctx, dx, dy, 6, 3, d.angle, '#64ffda', true)
   }
 
-  // player — glowing orb
+  // orbiting shield orbs — must match the collision pass's orbit math
+  if (p.shieldOrbs > 0) {
+    for (let i = 0; i < p.shieldOrbs; i++) {
+      const a = state.time * SHIELD_ORB.spin + (i / p.shieldOrbs) * Math.PI * 2
+      const ox = p.x + Math.cos(a) * SHIELD_ORB.orbit
+      const oy = p.y + Math.sin(a) * SHIELD_ORB.orbit
+      drawGlow(ctx, ox, oy, SHIELD_ORB.radius * 2.4, '#7c9bff', 0.85)
+      ctx.beginPath()
+      ctx.arc(ox, oy, SHIELD_ORB.radius * 0.6, 0, Math.PI * 2)
+      ctx.fillStyle = '#dbe6ff'
+      ctx.fill()
+    }
+  }
+
+  // player — glowing orb (brighter while overdrive is hot)
   const flash = p.hurtFlash > 0 && Math.sin(state.time * 40) > 0
-  drawGlow(ctx, p.x, p.y, 34, PALETTE.player, flash ? 0.4 : 1)
+  if (p.overdriveT > 0) {
+    drawGlow(ctx, p.x, p.y, 56, PICKUP_DEFS.overdrive.color, 0.7)
+  }
+  drawGlow(ctx, p.x, p.y, p.dashT > 0 ? 48 : 34, PALETTE.player, flash ? 0.4 : 1)
   ctx.beginPath()
   ctx.arc(p.x, p.y, 11, 0, Math.PI * 2)
   ctx.fillStyle = flash ? PALETTE.hp : PALETTE.playerCore
@@ -275,6 +396,24 @@ export function render(
   ctx.strokeStyle = PALETTE.player
   ctx.lineWidth = 3
   ctx.stroke()
+  // overdrive countdown — shrinking arc just outside the dash ring
+  if (p.overdriveT > 0) {
+    const frac = p.overdriveT / PICKUPS.overdriveTime
+    ctx.beginPath()
+    ctx.arc(p.x, p.y, 22, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2)
+    ctx.strokeStyle = 'rgba(77, 216, 255, 0.8)'
+    ctx.lineWidth = 3
+    ctx.stroke()
+  }
+  // dash cooldown ring: sweeps closed while recharging, flares when ready
+  if (p.dashCd > 0) {
+    const frac = 1 - p.dashCd / DASH.cooldown
+    ctx.beginPath()
+    ctx.arc(p.x, p.y, 17, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2)
+    ctx.strokeStyle = 'rgba(142, 246, 255, 0.55)'
+    ctx.lineWidth = 2.5
+    ctx.stroke()
+  }
 
   // particles
   for (const pt of state.particles) {
@@ -303,6 +442,12 @@ export function render(
 
   ctx.restore()
 
+  // nuke pickup — full-screen white flash that decays fast
+  if (state.flashT > 0) {
+    ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(1, state.flashT / 0.35) * 0.8})`
+    ctx.fillRect(0, 0, w, h)
+  }
+
   // environment transition banner — fades in, holds, fades out
   if (state.envBannerT > 0) {
     const t = state.envBannerT
@@ -312,6 +457,18 @@ export function render(
     ctx.font = "bold 22px 'Courier New', monospace"
     ctx.textAlign = 'center'
     ctx.fillText(`⟡ ENTERING: ${env.name} ⟡`, w / 2, h * 0.14)
+    ctx.globalAlpha = 1
+  }
+
+  // live personal-best banner — gold, fades like the env banner
+  if (state.pbBannerT > 0) {
+    const t = state.pbBannerT
+    const alpha = t > 2.3 ? (3 - t) / 0.7 : Math.min(1, t / 0.7)
+    ctx.globalAlpha = Math.max(0, Math.min(1, alpha))
+    ctx.fillStyle = PALETTE.coin
+    ctx.font = "bold 26px 'Courier New', monospace"
+    ctx.textAlign = 'center'
+    ctx.fillText('★ NEW RECORD ★', w / 2, h * 0.3)
     ctx.globalAlpha = 1
   }
 
@@ -327,13 +484,21 @@ export function render(
     ctx.fillText('⚠ BOSS INCOMING ⚠', w / 2, h * 0.22)
   }
 
-  // low-hp vignette
-  if (p.hp / p.maxHp < 0.3) {
-    const a = (0.3 - p.hp / p.maxHp) * 1.4
+  // low-hp vignette — throbs like a heartbeat instead of sitting static
+  if (p.hp / p.maxHp < 0.3 && p.hp > 0) {
+    const throb = 0.75 + 0.25 * Math.sin(state.time * 5.5)
+    const a = (0.3 - p.hp / p.maxHp) * 1.4 * throb
     const grad = ctx.createRadialGradient(w / 2, h / 2, h * 0.35, w / 2, h / 2, h * 0.75)
     grad.addColorStop(0, 'rgba(255,0,60,0)')
     grad.addColorStop(1, `rgba(255,0,60,${Math.min(0.45, a)})`)
     ctx.fillStyle = grad
+    ctx.fillRect(0, 0, w, h)
+  }
+
+  // death cinematic: fade the arena down as the recap approaches
+  if (state.dying) {
+    const t = Math.min(1, Math.max(0, 1 - state.deathT / 1.3))
+    ctx.fillStyle = `rgba(5, 4, 12, ${t * 0.55})`
     ctx.fillRect(0, 0, w, h)
   }
 
@@ -351,5 +516,27 @@ export function render(
       ctx.fillStyle = 'rgba(140, 200, 255, 0.35)'
       ctx.fill()
     }
+    // dash button — fills as the cooldown recharges
+    const bx = w - DASH_BTN_OFFSET
+    const by = h - DASH_BTN_OFFSET
+    const ready = p.dashCd <= 0
+    const frac = ready ? 1 : 1 - p.dashCd / DASH.cooldown
+    ctx.beginPath()
+    ctx.arc(bx, by, DASH_BTN_RADIUS, 0, Math.PI * 2)
+    ctx.fillStyle = ready ? 'rgba(77, 216, 255, 0.28)' : 'rgba(140, 200, 255, 0.12)'
+    ctx.fill()
+    ctx.strokeStyle = ready ? 'rgba(142, 246, 255, 0.8)' : 'rgba(140, 200, 255, 0.3)'
+    ctx.lineWidth = 2.5
+    ctx.stroke()
+    if (!ready) {
+      ctx.beginPath()
+      ctx.arc(bx, by, DASH_BTN_RADIUS, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2)
+      ctx.strokeStyle = 'rgba(142, 246, 255, 0.7)'
+      ctx.stroke()
+    }
+    ctx.fillStyle = ready ? 'rgba(234, 255, 255, 0.95)' : 'rgba(180, 210, 255, 0.4)'
+    ctx.font = "bold 15px 'Courier New', monospace"
+    ctx.textAlign = 'center'
+    ctx.fillText('DASH', bx, by + 5)
   }
 }

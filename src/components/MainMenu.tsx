@@ -1,12 +1,25 @@
 import { useEffect, useState } from 'react'
-import { ACHIEVEMENTS, CHARACTERS } from '../game/config'
+import {
+  ACHIEVEMENTS,
+  CHARACTERS,
+  PERM_UPGRADES,
+  dailyBoardId,
+  dailyKey,
+  permUpgradeCost,
+  todaysDailyMod,
+} from '../game/config'
 import { unlockAudio } from '../game/audio'
-import { fetchTopScores, isGlobalLeaderboardEnabled, type GlobalScore } from '../game/leaderboard'
+import {
+  fetchDailyScores,
+  fetchTopScores,
+  isGlobalLeaderboardEnabled,
+  type GlobalScore,
+} from '../game/leaderboard'
 import type { SaveData } from '../game/storage'
 import { formatTime } from './HUD'
 
-type Tab = 'play' | 'ranks' | 'trophies'
-type Board = 'local' | 'global'
+type Tab = 'play' | 'ranks' | 'trophies' | 'upgrades'
+type Board = 'local' | 'global' | 'daily'
 
 const HAS_VIBRATE = typeof navigator !== 'undefined' && 'vibrate' in navigator
 
@@ -15,6 +28,7 @@ export default function MainMenu({
   onPlay,
   onSelectCharacter,
   onBuyCharacter,
+  onBuyPermUpgrade,
   onToggleMute,
   onShake,
   onRename,
@@ -22,9 +36,11 @@ export default function MainMenu({
   onToggleReduceEffects,
 }: {
   save: SaveData
-  onPlay: () => void
+  /** start a run; true = today's daily challenge */
+  onPlay: (daily: boolean) => void
   onSelectCharacter: (id: string) => void
   onBuyCharacter: (id: string) => void
+  onBuyPermUpgrade: (id: string) => void
   onToggleMute: () => void
   onShake: (v: number) => void
   onRename: (name: string) => void
@@ -35,7 +51,11 @@ export default function MainMenu({
   const [board, setBoard] = useState<Board>(isGlobalLeaderboardEnabled() ? 'global' : 'local')
   const [nameInput, setNameInput] = useState(save.playerName)
   const [globalScores, setGlobalScores] = useState<GlobalScore[] | null>(null)
+  const [dailyScores, setDailyScores] = useState<GlobalScore[] | null>(null)
   const [globalState, setGlobalState] = useState<'idle' | 'loading' | 'error'>('idle')
+
+  const dailyMod = todaysDailyMod()
+  const dailyDone = save.dailyAttempt?.date === dailyKey()
 
   useEffect(() => setNameInput(save.playerName), [save.playerName])
 
@@ -45,21 +65,27 @@ export default function MainMenu({
     else setNameInput(save.playerName)
   }
 
-  function loadGlobal() {
+  function loadBoard(which: 'global' | 'daily') {
     if (!isGlobalLeaderboardEnabled()) return
     setGlobalState('loading')
-    fetchTopScores(10)
+    const fetch = which === 'global' ? fetchTopScores(10) : fetchDailyScores(dailyBoardId(), 10)
+    fetch
       .then((scores) => {
-        setGlobalScores(scores)
+        if (which === 'global') setGlobalScores(scores)
+        else setDailyScores(scores)
         setGlobalState('idle')
       })
       .catch(() => setGlobalState('error'))
   }
 
   useEffect(() => {
-    if (tab === 'ranks' && board === 'global' && globalScores === null) loadGlobal()
+    if (tab !== 'ranks') return
+    if (board === 'global' && globalScores === null) loadBoard('global')
+    if (board === 'daily' && dailyScores === null) loadBoard('daily')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, board])
+
+  const remoteScores = board === 'global' ? globalScores : dailyScores
 
   return (
     <div className="menu">
@@ -90,6 +116,12 @@ export default function MainMenu({
       <div className="tabs">
         <button className={tab === 'play' ? 'tab active' : 'tab'} onClick={() => setTab('play')}>
           PLAY
+        </button>
+        <button
+          className={tab === 'upgrades' ? 'tab active' : 'tab'}
+          onClick={() => setTab('upgrades')}
+        >
+          UPGRADES
         </button>
         <button className={tab === 'ranks' ? 'tab active' : 'tab'} onClick={() => setTab('ranks')}>
           LEADERBOARD
@@ -133,10 +165,25 @@ export default function MainMenu({
               // handler — iOS Safari only honors the unlock within the
               // original user-gesture call stack, not after a React effect
               unlockAudio()
-              onPlay()
+              onPlay(false)
             }}
           >
             ▶ PLAY
+          </button>
+          <button
+            className="daily-btn"
+            onClick={() => {
+              unlockAudio()
+              onPlay(true)
+            }}
+          >
+            <span className="daily-title">⚡ DAILY RUN — {dailyMod.name.toUpperCase()}</span>
+            <span className="daily-desc">{dailyMod.desc} · everyone gets the same run</span>
+            <span className={`daily-status ${dailyDone ? 'done' : ''}`}>
+              {dailyDone
+                ? `today: ${formatTime(save.dailyAttempt!.time)} · replays are practice`
+                : 'not attempted today · Vanguard only'}
+            </span>
           </button>
           <div className="settings-row">
             <button className="mini-btn" onClick={onToggleMute}>
@@ -163,11 +210,44 @@ export default function MainMenu({
             </label>
           </div>
           <p className="controls-hint">
-            desktop: WASD move · mouse aim · auto-fire · P pause
+            desktop: WASD move · mouse aim · auto-fire · SPACE dash · P pause
             <br />
-            mobile: left thumb move · right thumb aim
+            mobile: left thumb move · right thumb aim · DASH button
           </p>
         </>
+      )}
+
+      {tab === 'upgrades' && (
+        <div className="perm-list">
+          <p className="perm-hint">permanent boosts — every run, every character</p>
+          {PERM_UPGRADES.map((u) => {
+            const rank = save.permUpgrades[u.id] ?? 0
+            const maxed = rank >= u.maxRank
+            const cost = permUpgradeCost(u, rank)
+            const affordable = save.coins >= cost
+            return (
+              <div key={u.id} className={`perm ${maxed ? 'maxed' : ''}`}>
+                <span className="perm-icon">{u.icon}</span>
+                <div className="perm-info">
+                  <div className="perm-name">{u.name}</div>
+                  <div className="perm-desc">{u.desc}</div>
+                  <div className="perm-pips">
+                    {Array.from({ length: u.maxRank }, (_, i) => (
+                      <span key={i} className={`pip ${i < rank ? 'filled' : ''}`} />
+                    ))}
+                  </div>
+                </div>
+                <button
+                  className={`perm-buy ${maxed ? 'maxed' : affordable ? 'ok' : ''}`}
+                  disabled={maxed || !affordable}
+                  onClick={() => onBuyPermUpgrade(u.id)}
+                >
+                  {maxed ? 'MAX' : `🪙 ${cost}`}
+                </button>
+              </div>
+            )
+          })}
+        </div>
       )}
 
       {tab === 'ranks' && (
@@ -181,17 +261,29 @@ export default function MainMenu({
                 🌐 GLOBAL
               </button>
               <button
+                className={board === 'daily' ? 'pill active' : 'pill'}
+                onClick={() => setBoard('daily')}
+              >
+                📅 DAILY
+              </button>
+              <button
                 className={board === 'local' ? 'pill active' : 'pill'}
                 onClick={() => setBoard('local')}
               >
                 💾 THIS DEVICE
               </button>
-              {board === 'global' && (
-                <button className="pill refresh" onClick={loadGlobal} title="refresh">
+              {board !== 'local' && (
+                <button className="pill refresh" onClick={() => loadBoard(board)} title="refresh">
                   ⟳
                 </button>
               )}
             </div>
+          )}
+
+          {board === 'daily' && (
+            <p className="board-daily-label">
+              today: {dailyMod.name.toUpperCase()} — {dailyMod.desc}
+            </p>
           )}
 
           {board === 'local' && (
@@ -212,17 +304,19 @@ export default function MainMenu({
             </div>
           )}
 
-          {board === 'global' && (
+          {board !== 'local' && (
             <div className="board">
               {globalState === 'loading' && <p className="board-empty">loading…</p>}
               {globalState === 'error' && (
                 <p className="board-empty">couldn't reach the leaderboard — try again</p>
               )}
-              {globalState === 'idle' && globalScores?.length === 0 && (
-                <p className="board-empty">no runs yet — be the first</p>
+              {globalState === 'idle' && remoteScores?.length === 0 && (
+                <p className="board-empty">
+                  {board === 'daily' ? 'no daily runs yet — set the bar' : 'no runs yet — be the first'}
+                </p>
               )}
               {globalState === 'idle' &&
-                globalScores?.map((e, i) => (
+                remoteScores?.map((e, i) => (
                   <div key={`${e.name}-${e.created_at}-${i}`} className="board-row">
                     <span className="board-rank">#{i + 1}</span>
                     <span className="board-time">{formatTime(e.time_seconds)}</span>
@@ -240,20 +334,26 @@ export default function MainMenu({
       )}
 
       {tab === 'trophies' && (
-        <div className="trophies">
-          {ACHIEVEMENTS.map((a) => {
-            const got = save.achievements.includes(a.id)
-            return (
-              <div key={a.id} className={`trophy ${got ? 'got' : ''}`}>
-                <span className="trophy-icon">{got ? a.icon : '🔒'}</span>
-                <div>
-                  <div className="trophy-name">{a.name}</div>
-                  <div className="trophy-desc">{a.desc}</div>
+        <>
+          <p className="trophy-count">
+            {ACHIEVEMENTS.filter((a) => save.achievements.includes(a.id)).length} /{' '}
+            {ACHIEVEMENTS.length}
+          </p>
+          <div className="trophies">
+            {ACHIEVEMENTS.map((a) => {
+              const got = save.achievements.includes(a.id)
+              return (
+                <div key={a.id} className={`trophy ${got ? 'got' : ''}`}>
+                  <span className="trophy-icon">{got ? a.icon : '🔒'}</span>
+                  <div>
+                    <div className="trophy-name">{a.name}</div>
+                    <div className="trophy-desc">{a.desc}</div>
+                  </div>
                 </div>
-              </div>
-            )
-          })}
-        </div>
+              )
+            })}
+          </div>
+        </>
       )}
     </div>
   )

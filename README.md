@@ -26,19 +26,39 @@ I can beat 20."*
 
 ## Features
 
-- **12+ stacking upgrades** — Fire / Ice / Lightning-chain / Explosive / Ricochet
-  bullet mods, Triple Shot, Railgun Pierce, Drone Companions, regen, speed… late
-  picks unlock exotic combos (Explosive + Ricochet is a personal favorite)
-- **7 enemy types** — swarming bugs, tanks, ranged snipers, erratic flyers,
-  exploding rushers, teleporting ninjas, and shield-bearers that must be flanked
-- **3 bosses on a 3-minute clock** — Giant Robot (rockets + radial slam),
-  Cyber Worm (burrows and erupts under you), Alien Queen (minion swarms +
-  projectile bursts) — each cycle they return stronger
-- **Meta progression** — coins persist between runs to unlock 4 characters with
-  different starting builds; local top-10 leaderboard; 9 achievements
+- **18 stacking upgrades → 4 weapon evolutions** — Fire / Ice / Lightning-chain /
+  Explosive / Ricochet bullet mods, Triple Shot, Railgun Pierce, Drone Companions,
+  Orbiting Shield, Nova Pulse, Neural Link… max out two synergistic lines and the
+  next level-up guarantees a gold **EVOLUTION** card: *Meteor Storm* (explosions
+  scorch the ground), *Static Field* (auto arc-storm), *Bullet Hell* (endless
+  ricochets), *Orbital Array* (novas fire radial bullet rings)
+- **Dash with i-frames** — Space / right-click on desktop, a dedicated DASH button
+  on touch. Blink through the swarm, cooldown ring on your orb.
+- **Kill-streak combos** — chain kills inside a 2-second window for up to ×3
+  XP/coins; taking a hit breaks the streak
+- **7 enemy types + elites** — swarming bugs, tanks, ranged snipers, erratic
+  flyers, exploding rushers, teleporting ninjas, shield-bearers — and rare
+  **elite** variants (swift / regenerating / splitting / vampiric) that drop
+  treasure chests with slot-machine upgrade rewards
+- **Ground pickups** — health packs, magnet bombs, screen-clearing nukes, and
+  10-second overdrive
+- **3 bosses on a 3-minute clock, telegraphed** — Giant Robot (rockets + radial
+  slam), Cyber Worm (burrows and erupts under you), Alien Queen (minion swarms +
+  projectile bursts) — every big attack has a visible wind-up, and each cycle
+  they return stronger
+- **Cinematic deaths** — slow-mo zoom on the killing blow, then a recap that
+  names what killed you, your max combo, and your live global rank
+- **Meta progression** — coins persist between runs: 4 characters with different
+  starting builds **plus a permanent upgrade shop** (hull, damage, magnet, coin
+  gain, head start, speed); local top-10 leaderboard; **24 achievements** with
+  in-run toast pops
+- **⚡ Daily challenge** — everyone plays the same seeded run with a rotating
+  daily modifier (Swarm Day, Glass Cannon, Elite Hour…) on its own global
+  leaderboard. One real attempt per day; replays are practice.
 - **Global leaderboard** — every finished run is submitted to a public Supabase
   table under your editable "callsign," visible to everyone who plays. No
-  accounts, no login — the menu's LEADERBOARD tab has a GLOBAL / THIS DEVICE toggle.
+  accounts, no login — the menu's LEADERBOARD tab has GLOBAL / THIS DEVICE /
+  DAILY toggles.
 - **All juice, no assets** — every visual is procedural canvas glow (additive
   compositing, particle bursts, screen shake, floating damage numbers). Every
   sound *and* the music score are synthesized live with the Web Audio API —
@@ -52,8 +72,9 @@ I can beat 20."*
 - **A score that sings** — a 4-bar synthwave progression per environment with
   pulsing sub bass, a filtered arpeggio, four-on-the-floor drums, and a legato
   lead voice with real portamento + vibrato carrying an actual melody.
-  Intensity ramps with survival time and kicks into a driving boss mode during
-  boss fights.
+  Intensity reacts to real danger (swarm density + bosses), kicks into a driving
+  boss mode during boss fights, and muffles behind a heartbeat when you're
+  nearly dead.
 - **Desktop + mobile, properly** — WASD + mouse on PC, dual virtual thumbsticks
   on phones, auto-detected. A visible pause button (not just a keyboard
   shortcut) so touch players can actually pause. Haptic feedback on
@@ -63,10 +84,10 @@ I can beat 20."*
 
 ## Controls
 
-| | Move | Aim | Fire | Pause |
-|---|---|---|---|---|
-| **Desktop** | WASD / arrows | mouse | automatic | P / Esc / pause button |
-| **Mobile** | left thumbstick | right thumbstick | automatic | pause button (top-right) |
+| | Move | Aim | Fire | Dash | Pause |
+|---|---|---|---|---|---|
+| **Desktop** | WASD / arrows | mouse | automatic | Space / right-click | P / Esc / pause button |
+| **Mobile** | left thumbstick | right thumbstick | automatic | DASH button (bottom-right) | pause button (top-right) |
 
 ## Tech stack
 
@@ -216,13 +237,11 @@ local-only leaderboard automatically.
 
 ## Future improvements
 
-- Weapon evolutions (max an upgrade + boss kill → evolved form)
-- Seeded daily challenge runs
-- Kill-streak multiplier + screen-clear "nova" panic button
 - Colorblind-safe palette option
 - Gamepad support
 - A music theme for the menu screen (currently silent until you hit Play)
 - Country/region flags on the global leaderboard
+- Shareable run-recap image cards
 
 ## License
 

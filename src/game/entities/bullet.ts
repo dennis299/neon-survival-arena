@@ -1,6 +1,8 @@
 // Player weapons: main auto-fire cannon + orbiting drone companions.
 
+import { PICKUPS } from '../config'
 import { sfx } from '../audio'
+import { rng } from '../rng'
 import type { Bullet, GameState } from '../types'
 
 const BULLET_LIFE = 1.4
@@ -32,15 +34,25 @@ function makeBullet(
     fire: p.fireLevel > 0,
     ice: p.iceLevel > 0,
     fromDrone,
+    bounces: 0,
     hitIds: new Set(),
+  }
+}
+
+/** Orbital Array: each nova also launches a ring of bullets from the player. */
+export function fireRadialRing(state: GameState, count = 16) {
+  const p = state.player
+  for (let i = 0; i < count; i++) {
+    state.bullets.push(makeBullet(state, p.x, p.y, (i / count) * Math.PI * 2, 1, false))
   }
 }
 
 export function firePlayerWeapon(state: GameState, dt: number) {
   const p = state.player
+  const rate = p.fireRate * (p.overdriveT > 0 ? PICKUPS.overdriveMult : 1)
   p.fireT -= dt
   while (p.fireT <= 0) {
-    p.fireT += 1 / p.fireRate
+    p.fireT += 1 / rate
     const n = p.bulletCount
     const spread = (p.spreadDeg * Math.PI) / 180
     for (let i = 0; i < n; i++) {
@@ -55,7 +67,7 @@ export function updateDrones(state: GameState, dt: number) {
   const p = state.player
   // keep drone unit count in sync with the stat
   while (state.droneUnits.length < p.drones) {
-    state.droneUnits.push({ angle: Math.random() * Math.PI * 2, fireT: 0 })
+    state.droneUnits.push({ angle: rng() * Math.PI * 2, fireT: 0 })
   }
   for (let i = 0; i < state.droneUnits.length; i++) {
     const d = state.droneUnits[i]
@@ -85,7 +97,8 @@ export function updateDrones(state: GameState, dt: number) {
       if (target) {
         const ang = Math.atan2(target.y - dy, target.x - dx)
         state.bullets.push(makeBullet(state, dx, dy, ang, 0.9, true))
-        d.fireT = 1 / DRONE_FIRE_RATE
+        // Orbital Array evolution doubles drone fire rate
+        d.fireT = 1 / (DRONE_FIRE_RATE * (p.orbitalArray ? 2 : 1))
       }
     }
   }

@@ -3,6 +3,8 @@
 // music.ts, keyed by the same id). The loop swaps environments every 60-120s
 // so a long run doesn't look and sound identical at minute 12 as at minute 1.
 
+import { rng } from './rng'
+
 export type AmbientKind = 'none' | 'stars' | 'snow' | 'embers' | 'spores'
 
 export interface EnvironmentDef {
@@ -71,5 +73,6 @@ export function nextEnvIndex(current: number): number {
 }
 
 export function randomEnvDuration(): number {
-  return ENV_MIN_DURATION + Math.random() * (ENV_MAX_DURATION - ENV_MIN_DURATION)
+  // sim rng, not Math.random — seeded daily runs share environment timing
+  return ENV_MIN_DURATION + rng() * (ENV_MAX_DURATION - ENV_MIN_DURATION)
 }

@@ -127,6 +127,7 @@ interface LeadVoice {
 
 let lead: LeadVoice | null = null
 let duckBus: GainNode | null = null
+let lowHpFilter: BiquadFilterNode | null = null
 let delayNode: DelayNode | null = null
 let delayFeedback: GainNode | null = null
 let delayWetGain: GainNode | null = null
@@ -136,6 +137,7 @@ let nextStepTime = 0
 let step = 0
 let intensity = 0
 let bossMode = false
+let lowHpMode = false
 let activeTheme: MusicTheme = MUSIC_THEMES.outskirts
 
 function stepDur(): number {
@@ -299,6 +301,8 @@ function scheduleStep(s: number, time: number) {
   // sparse-drum themes (frostbyte/void) hold back further for a calmer feel.
   const drumScale = theme.sparseDrums ? 0.55 : 1
   if (stepInBar % 4 === 0) kick(time, (0.5 + intensity * 0.15) * drumScale)
+  // low-hp heartbeat: a "lub-dub" doubling of the kick while the mix is muffled
+  if (lowHpMode && stepInBar % 8 === 3) kick(time, 0.55)
   if (stepInBar % 4 === 2 && (intensity > 0.15 || bossMode) && !theme.sparseDrums) clap(time, 0.16)
   const hatDiv = bossMode || intensity > 0.6 ? 1 : 2
   const hatGate = theme.sparseDrums ? intensity > 0.3 || bossMode : intensity > 0.12 || bossMode
@@ -340,6 +344,8 @@ function applyThemeTimbre(theme: MusicTheme) {
 export interface MusicHandle {
   setIntensity: (v: number) => void
   setBoss: (active: boolean) => void
+  /** near-death: muffles the mix and adds a heartbeat until it clears */
+  setLowHp: (active: boolean) => void
   /** crossfades to a different environment's theme (id from environments.ts) */
   setTheme: (id: string) => void
   stop: () => void
@@ -359,7 +365,12 @@ export function startMusic(initialThemeId?: string): MusicHandle | null {
   if (!duckBus) {
     duckBus = engine.ctx.createGain()
     duckBus.gain.value = MUSIC_BUS_VOLUME
-    duckBus.connect(engine.music)
+    // low-hp muffle: a lowpass between the score and the music bus, wide open
+    // normally, swept down when the player is nearly dead
+    lowHpFilter = engine.ctx.createBiquadFilter()
+    lowHpFilter.type = 'lowpass'
+    lowHpFilter.frequency.value = 18000
+    duckBus.connect(lowHpFilter).connect(engine.music)
     // space-echo send, only audible when the active theme's delayWet > 0
     delayNode = engine.ctx.createDelay(0.6)
     delayNode.delayTime.value = 0.28
@@ -369,9 +380,11 @@ export function startMusic(initialThemeId?: string): MusicHandle | null {
     delayWetGain.gain.value = activeTheme.delayWet
     delayNode.connect(delayFeedback).connect(delayNode)
     delayNode.connect(delayWetGain).connect(duckBus)
-  } else {
-    duckBus.connect(engine.music)
+  } else if (lowHpFilter) {
+    lowHpFilter.connect(engine.music)
   }
+  lowHpMode = false
+  lowHpFilter?.frequency.setValueAtTime(18000, engine.ctx.currentTime)
   applyThemeTimbre(activeTheme)
 
   if (timer === null) {
@@ -383,6 +396,13 @@ export function startMusic(initialThemeId?: string): MusicHandle | null {
     },
     setBoss(active: boolean) {
       bossMode = active
+    },
+    setLowHp(active: boolean) {
+      if (active === lowHpMode) return
+      lowHpMode = active
+      if (lowHpFilter && engineRef) {
+        lowHpFilter.frequency.setTargetAtTime(active ? 750 : 18000, engineRef.ctx.currentTime, 0.4)
+      }
     },
     setTheme(id: string) {
       const next = MUSIC_THEMES[id]
@@ -412,7 +432,9 @@ export function startMusic(initialThemeId?: string): MusicHandle | null {
         lead.gain.gain.cancelScheduledValues(engineRef.ctx.currentTime)
         lead.gain.gain.setTargetAtTime(0.0001, engineRef.ctx.currentTime, 0.05)
       }
-      duckBus?.disconnect()
+      // detach at the end of the chain; duckBus→filter wiring stays intact
+      // so the next startMusic() only needs to re-connect filter→music bus
+      lowHpFilter?.disconnect()
       engineRef = null
     },
   }
